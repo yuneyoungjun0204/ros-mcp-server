@@ -182,3 +182,5 @@ camera/*
 
 # superpowers plans
 docs/superpowers/
+# oh-my-claudecode local config
+.omc/
