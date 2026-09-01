@@ -1342,8 +1342,8 @@
                         document.getElementById('thrust-value').textContent =
                             cmd.thrust !== undefined ? cmd.thrust.toFixed(0) : '--';
 
-                        // Goal heading = current heading + psi_error
-                        const goalHdg = psiError !== undefined ? (heading + psiError + 360) % 360 : null;
+                        // Goal heading = current compass heading + psi_error
+                        const goalHdg = psiError !== undefined ? (headingCompass + psiError + 360) % 360 : null;
                         document.getElementById('goal-heading').textContent =
                             goalHdg !== null ? goalHdg.toFixed(0) + '°' : '--°';
 
@@ -2028,15 +2028,16 @@
 
             // 클러스터 표시 (안정화된 클러스터만)
             if (clusterData.stable && clusterData.stable.length > 0) {
-                // ENU heading을 navigation 좌표로 변환 (0°=East → 0°=North)
-                const navHeadingRad = (90 - boatPos.heading) * Math.PI / 180;
+                // ENU heading (0°=East, CCW+)
+                const headingRadENU = boatPos.heading * Math.PI / 180;
                 for (let i = 0; i < clusterData.stable.length; i++) {
                     const c = clusterData.stable[i];
-                    // 클러스터 각도를 월드 좌표로 변환
+                    // 클러스터 각도(보트 기준, atan2 컨벤션)를 월드 좌표로 변환
                     const clusterAngleRad = c.center_angle * Math.PI / 180;
-                    const worldAngle = clusterAngleRad + navHeadingRad;
-                    const wx = boatPos.x + c.distance * Math.sin(worldAngle);
-                    const wy = boatPos.y + c.distance * Math.cos(worldAngle);
+                    const worldAngle = clusterAngleRad + headingRadENU;
+                    // ENU: x=East, y=North → cos for x, sin for y
+                    const wx = boatPos.x + c.distance * Math.cos(worldAngle);
+                    const wy = boatPos.y + c.distance * Math.sin(worldAngle);
                     const p = worldToScreen(wx, wy);
                     if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) continue;
 
@@ -2214,18 +2215,19 @@
         // LiDAR 데이터를 맵 월드 좌표로 변환
         function updateLidarOnMap(ranges) {
             lidarPoints = [];
-            // ENU heading을 navigation 좌표로 변환 (0°=East → 0°=North)
-            const navHeadingRad = (90 - boatPos.heading) * Math.PI / 180;
+            // ENU heading (0°=East, CCW+)
+            const headingRadENU = boatPos.heading * Math.PI / 180;
 
             for (let i = 0; i < ranges.length; i++) {
                 const r = ranges[i];
                 if (r > 0.5 && r < 30) { // 유효 범위
-                    // LiDAR 각도 (보트 기준, 전방이 0)
-                    const lidarAngle = (i / ranges.length) * Math.PI * 2 - Math.PI;
-                    // 월드 좌표로 변환 (navigation 헤딩 적용)
-                    const worldAngle = lidarAngle + navHeadingRad;
-                    const wx = boatPos.x + r * Math.sin(worldAngle);
-                    const wy = boatPos.y + r * Math.cos(worldAngle);
+                    // LiDAR 각도 (보트 기준, index 0 = 전방 = 0°, CCW 양수)
+                    const lidarAngle = (i / ranges.length) * Math.PI * 2;
+                    // 월드 좌표로 변환 (ENU 헤딩 적용)
+                    const worldAngle = lidarAngle + headingRadENU;
+                    // ENU: x=East, y=North → cos for x, sin for y
+                    const wx = boatPos.x + r * Math.cos(worldAngle);
+                    const wy = boatPos.y + r * Math.sin(worldAngle);
                     lidarPoints.push({ x: wx, y: wy, dist: r });
                 }
             }
