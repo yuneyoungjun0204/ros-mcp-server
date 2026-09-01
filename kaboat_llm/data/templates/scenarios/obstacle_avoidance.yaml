@@ -1,0 +1,334 @@
+# Obstacle Avoidance Scenarios (20개)
+# 전방 장애물 회피, 좁은 통로 통과, 동적 장애물
+
+metadata:
+  category: obstacle_avoidance
+  count: 20
+  description: 장애물 감지 및 회피 시나리오
+
+scenarios:
+  # === 전방 장애물 회피 (6개) ===
+  - id: obs_001
+    name: 전방 단일 장애물 회피
+    context:
+      position: {x: 0, y: 0, heading: 0}
+      sensors:
+        lidar:
+          front: 8
+          left: 50
+          right: 50
+          obstacles_detected: 1
+      mission:
+        type: waypoint_navigation
+        current_waypoint: {x: 100, y: 0}
+    user_command: "앞에 장애물이 있어, 피해서 가"
+    expected_output:
+      tool: kaboat_navigate_to
+      parameters:
+        target: {type: waypoint, index: current}
+        speed: normal
+        avoid_obstacles: true
+    variations:
+      - "장애물 피해서 목적지로 가"
+      - "회피하면서 이동해"
+
+  - id: obs_002
+    name: 전방 장애물 - 좌측 회피
+    context:
+      sensors:
+        lidar:
+          front: 5
+          left: 30
+          right: 10
+          obstacles_detected: 2
+    user_command: "왼쪽으로 피해"
+    expected_output:
+      tool: kaboat_avoid_obstacle
+      parameters:
+        direction: left
+        resume_navigation: true
+
+  - id: obs_003
+    name: 전방 장애물 - 우측 회피
+    context:
+      sensors:
+        lidar:
+          front: 5
+          left: 10
+          right: 30
+          obstacles_detected: 2
+    user_command: "오른쪽으로 피해"
+    expected_output:
+      tool: kaboat_avoid_obstacle
+      parameters:
+        direction: right
+        resume_navigation: true
+
+  - id: obs_004
+    name: 전방 장애물 - 자동 회피 방향
+    context:
+      sensors:
+        lidar:
+          front: 6
+          left: 25
+          right: 15
+          obstacles_detected: 1
+    user_command: "알아서 피해서 가"
+    expected_output:
+      tool: kaboat_avoid_obstacle
+      parameters:
+        direction: auto  # 더 넓은 좌측 선택
+        resume_navigation: true
+
+  - id: obs_005
+    name: 매우 가까운 장애물
+    context:
+      sensors:
+        lidar:
+          front: 2.5
+          obstacles_detected: 1
+    user_command: "장애물이 너무 가까워"
+    expected_output:
+      tool: kaboat_emergency_stop
+      parameters: {}
+      reasoning: "안전 거리(3m) 미만. 긴급 정지 후 회피 필요"
+
+  - id: obs_006
+    name: 후진 후 회피
+    context:
+      sensors:
+        lidar:
+          front: 1.5
+          back: 20
+          left: 5
+          right: 5
+    user_command: "뒤로 빠지고 피해"
+    expected_output:
+      tool: kaboat_sequence
+      parameters:
+        actions:
+          - {tool: kaboat_move_backward, params: {distance: 5}}
+          - {tool: kaboat_avoid_obstacle, params: {direction: auto}}
+
+  # === 좁은 통로 통과 (5개) ===
+  - id: obs_007
+    name: 좁은 통로 진입
+    context:
+      sensors:
+        lidar:
+          front: 30
+          left: 4
+          right: 4
+          obstacles_detected: 2
+      vision:
+        description: "양옆에 장애물, 중앙에 좁은 통로"
+    user_command: "좁은 통로로 들어가"
+    expected_output:
+      tool: kaboat_navigate_to
+      parameters:
+        target: {type: relative, forward: 30}
+        speed: slow
+        avoid_obstacles: true
+        corridor_mode: true
+
+  - id: obs_008
+    name: 부표 게이트 통과
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: red, distance: 10, bearing: 15}
+          - {type: buoy, color: green, distance: 10, bearing: -15}
+    user_command: "빨간 부표와 초록 부표 사이로 통과해"
+    expected_output:
+      tool: kaboat_navigate_between
+      parameters:
+        target_left: {type: buoy, color: green}
+        target_right: {type: buoy, color: red}
+        speed: normal
+
+  - id: obs_009
+    name: 게이트 정렬 후 통과
+    context:
+      position: {heading: 30}
+      vision:
+        detected_objects:
+          - {type: buoy, color: red, distance: 15, bearing: 20}
+          - {type: buoy, color: green, distance: 15, bearing: -10}
+    user_command: "게이트에 맞춰 정렬하고 통과해"
+    expected_output:
+      tool: kaboat_align_and_pass
+      parameters:
+        gate:
+          left: {type: buoy, color: green}
+          right: {type: buoy, color: red}
+        speed: slow
+
+  - id: obs_010
+    name: 연속 게이트 통과
+    context:
+      mission:
+        type: gate_navigation
+        gates: [gate1, gate2, gate3]
+        current_gate: 0
+    user_command: "게이트들 순서대로 통과해"
+    expected_output:
+      tool: kaboat_execute_mission
+      parameters:
+        mission_type: aligned_navigation
+        speed: normal
+
+  - id: obs_011
+    name: 통로 폭 확인
+    context:
+      sensors:
+        lidar:
+          left: 3
+          right: 3
+    user_command: "통과할 수 있어?"
+    expected_output:
+      tool: kaboat_check_passage
+      parameters:
+        min_width: 4  # 보트 폭 + 여유
+      reasoning: "현재 통로 폭 6m, 보트 폭 2.5m. 통과 가능"
+
+  # === 동적 장애물 (4개) ===
+  - id: obs_012
+    name: 움직이는 장애물 감지
+    context:
+      sensors:
+        lidar:
+          front: 20
+          obstacles_detected: 1
+          obstacle_velocity: 2.5  # m/s approaching
+    user_command: "앞에 뭔가 다가오고 있어"
+    expected_output:
+      tool: kaboat_track_and_avoid
+      parameters:
+        tracking_mode: dynamic
+        safe_margin: 10
+
+  - id: obs_013
+    name: 다른 선박 회피
+    context:
+      vision:
+        detected_objects:
+          - {type: vessel, distance: 30, bearing: 10, velocity: 3}
+    user_command: "저 배 피해"
+    expected_output:
+      tool: kaboat_avoid_vessel
+      parameters:
+        colregs_compliant: true  # 해상충돌방지규칙 준수
+        safe_distance: 20
+
+  - id: obs_014
+    name: 대기 후 통과
+    context:
+      sensors:
+        lidar:
+          front: 15
+          obstacle_velocity: -3  # 멀어지는 중
+    user_command: "장애물 지나갈 때까지 기다려"
+    expected_output:
+      tool: kaboat_wait_clear
+      parameters:
+        direction: front
+        timeout: 30
+
+  - id: obs_015
+    name: 장애물 추적
+    context:
+      vision:
+        detected_objects:
+          - {type: unknown, distance: 25, bearing: 5}
+    user_command: "저 물체 추적해"
+    expected_output:
+      tool: kaboat_track_object
+      parameters:
+        target: {bearing: 5, distance: 25}
+        maintain_distance: 15
+
+  # === 복합 회피 (5개) ===
+  - id: obs_016
+    name: 다중 장애물 환경
+    context:
+      sensors:
+        lidar:
+          front: 10
+          left: 8
+          right: 12
+          obstacles_detected: 5
+    user_command: "장애물이 많아, 안전하게 통과해"
+    expected_output:
+      tool: kaboat_navigate_to
+      parameters:
+        target: {type: waypoint, index: current}
+        speed: slow
+        avoid_obstacles: true
+        planning_mode: conservative
+
+  - id: obs_017
+    name: 장애물 필드 탐색
+    context:
+      sensors:
+        lidar:
+          obstacles_detected: 10
+      mission:
+        type: obstacle_field
+    user_command: "장애물 필드 통과해"
+    expected_output:
+      tool: kaboat_navigate_obstacle_field
+      parameters:
+        strategy: safest_path
+        speed: slow
+
+  - id: obs_018
+    name: 안전 영역 확보
+    context:
+      sensors:
+        lidar:
+          front: 5
+          left: 4
+          right: 6
+          back: 30
+    user_command: "안전한 곳으로 빠져"
+    expected_output:
+      tool: kaboat_retreat_to_safe
+      parameters:
+        min_clearance: 10
+
+  - id: obs_019
+    name: 회피 중 미션 유지
+    context:
+      mission:
+        type: waypoint_navigation
+        current_waypoint: {x: 100, y: 0}
+      sensors:
+        lidar:
+          front: 7
+          obstacles_detected: 1
+    user_command: "장애물 피하면서 미션 계속해"
+    expected_output:
+      tool: kaboat_navigate_to
+      parameters:
+        target: {type: waypoint, index: current}
+        avoid_obstacles: true
+        mission_priority: true
+
+  - id: obs_020
+    name: 장애물 정보 보고
+    context:
+      sensors:
+        lidar:
+          front: 15
+          left: 8
+          right: 22
+          obstacles_detected: 3
+    user_command: "주변 장애물 상황 알려줘"
+    expected_output:
+      tool: kaboat_report_observation
+      parameters:
+        type: obstacles
+        details:
+          front: {distance: 15, count: 1}
+          left: {distance: 8, count: 1}
+          right: {distance: 22, count: 1}

@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KABOAT Tool Call",
+  "description": "ROS 2 MCP Tool Call 출력 스키마",
+  "type": "object",
+  "required": ["tool", "parameters"],
+  "properties": {
+    "tool": {
+      "type": "string",
+      "enum": [
+        "kaboat_get_status",
+        "kaboat_navigate_to",
+        "kaboat_navigate_between",
+        "kaboat_navigate_and_hold",
+        "kaboat_navigate_obstacle_field",
+        "kaboat_follow_path",
+        "kaboat_turn",
+        "kaboat_align_heading",
+        "kaboat_align_to_object",
+        "kaboat_align_and_pass",
+        "kaboat_set_speed",
+        "kaboat_stop",
+        "kaboat_emergency_stop",
+        "kaboat_move_backward",
+        "kaboat_fine_adjust",
+        "kaboat_hold_position",
+        "kaboat_approach_object",
+        "kaboat_approach_dock_bay",
+        "kaboat_avoid_obstacle",
+        "kaboat_avoid_vessel",
+        "kaboat_track_and_avoid",
+        "kaboat_track_object",
+        "kaboat_wait_clear",
+        "kaboat_check_passage",
+        "kaboat_retreat_to_safe",
+        "kaboat_search_pattern",
+        "kaboat_explore",
+        "kaboat_orbit_buoy",
+        "kaboat_exit_orbit",
+        "kaboat_identify_object",
+        "kaboat_identify_gate",
+        "kaboat_dock",
+        "kaboat_dock_standby",
+        "kaboat_undock",
+        "kaboat_execute_mission",
+        "kaboat_abort_mission",
+        "kaboat_resume_mission",
+        "kaboat_retry_mission",
+        "kaboat_report_observation",
+        "kaboat_submit_report",
+        "kaboat_return_home",
+        "kaboat_safe_mode",
+        "kaboat_localize",
+        "kaboat_replan_path",
+        "kaboat_calibrate_sensor",
+        "kaboat_sequence"
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "reasoning": {
+      "type": "string",
+      "description": "Tool 선택 이유 (선택적)"
+    }
+  },
+  "additionalProperties": false
+}

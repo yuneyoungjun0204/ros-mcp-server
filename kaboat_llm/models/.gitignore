@@ -1,0 +1,7 @@
+# YOLO model weights (too large for git)
+*.pt
+*.onnx
+
+# Download these models manually:
+# - roboboat_buoy.pt: https://github.com/InspirationRobotics/roboboat_GNC_2025/raw/main/YOLOv8_model/best.pt
+# - yolov8n.pt: ultralytics default model

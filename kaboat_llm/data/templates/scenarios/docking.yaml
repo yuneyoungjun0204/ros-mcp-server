@@ -1,0 +1,227 @@
+# Docking Scenarios (15개)
+# 도킹 접근, 정밀 위치 조정, 도킹 완료 판정
+
+metadata:
+  category: docking
+  count: 15
+  description: 도킹 관련 미션 시나리오
+
+scenarios:
+  # === 도킹 스테이션 탐지 (3개) ===
+  - id: dock_001
+    name: 도킹 스테이션 탐색
+    context:
+      position: {x: -490, y: 200}
+      vision:
+        description: "도킹 스테이션 보이지 않음"
+    user_command: "도킹 스테이션 찾아"
+    expected_output:
+      tool: kaboat_search_pattern
+      parameters:
+        target: dock_station
+        pattern: sector_scan
+        range: 100
+
+  - id: dock_002
+    name: 도킹 스테이션 확인
+    context:
+      vision:
+        detected_objects:
+          - {type: dock_station, distance: 50, bearing: 30}
+    user_command: "저게 도킹 스테이션이야?"
+    expected_output:
+      tool: kaboat_identify_object
+      parameters:
+        target: {bearing: 30, distance: 50}
+        expected_type: dock_station
+
+  - id: dock_003
+    name: 도킹 베이 식별
+    context:
+      vision:
+        detected_objects:
+          - {type: dock_station, distance: 20}
+          - {type: dock_bay, id: bay_1, status: empty}
+          - {type: dock_bay, id: bay_2, status: occupied}
+    user_command: "비어있는 베이가 어디야?"
+    expected_output:
+      tool: kaboat_report_observation
+      parameters:
+        type: dock_bays
+        details:
+          available: [bay_1]
+          occupied: [bay_2]
+
+  # === 도킹 접근 (5개) ===
+  - id: dock_004
+    name: 도킹 스테이션 접근
+    context:
+      vision:
+        detected_objects:
+          - {type: dock_station, distance: 40, bearing: 15}
+    user_command: "도킹 스테이션으로 가"
+    expected_output:
+      tool: kaboat_approach_object
+      parameters:
+        target: {type: dock_station}
+        stop_distance: 15
+        speed: normal
+
+  - id: dock_005
+    name: 도킹 진입 정렬
+    context:
+      position: {heading: 45}
+      vision:
+        detected_objects:
+          - {type: dock_station, distance: 15, entry_heading: 270}
+    user_command: "도킹 진입 정렬해"
+    expected_output:
+      tool: kaboat_align_heading
+      parameters:
+        target_heading: 270  # 도크 진입 방향
+        tolerance: 5
+
+  - id: dock_006
+    name: 특정 베이로 접근
+    context:
+      vision:
+        detected_objects:
+          - {type: dock_bay, id: bay_1, distance: 12, bearing: 5}
+    user_command: "베이 1번으로 접근해"
+    expected_output:
+      tool: kaboat_approach_dock_bay
+      parameters:
+        bay_id: bay_1
+        speed: slow
+
+  - id: dock_007
+    name: 도킹 준비 위치
+    context:
+      vision:
+        detected_objects:
+          - {type: dock_bay, id: bay_1, distance: 8}
+    user_command: "도킹 대기 위치로 가"
+    expected_output:
+      tool: kaboat_dock_standby
+      parameters:
+        bay_id: bay_1
+        standby_distance: 5
+
+  - id: dock_008
+    name: 저속 도킹 접근
+    context:
+      vision:
+        detected_objects:
+          - {type: dock_bay, id: bay_1, distance: 5}
+      sensors:
+        lidar:
+          front: 5
+    user_command: "천천히 도킹해"
+    expected_output:
+      tool: kaboat_dock
+      parameters:
+        bay_id: bay_1
+        speed: crawl
+        approach_mode: careful
+
+  # === 정밀 도킹 (4개) ===
+  - id: dock_009
+    name: 도킹 실행
+    context:
+      position: {x: -490, y: 165}
+      vision:
+        detected_objects:
+          - {type: dock_bay, id: bay_1, distance: 3, aligned: true}
+    user_command: "도킹 시작"
+    expected_output:
+      tool: kaboat_dock
+      parameters:
+        bay_id: bay_1
+        speed: crawl
+
+  - id: dock_010
+    name: 도킹 위치 미세 조정
+    context:
+      mission:
+        type: docking
+        status: aligning
+        position_error: {x: 0.3, y: -0.2}
+    user_command: "위치 맞춰"
+    expected_output:
+      tool: kaboat_fine_adjust
+      parameters:
+        target: dock_center
+        tolerance: 0.2
+
+  - id: dock_011
+    name: 도킹 헤딩 조정
+    context:
+      mission:
+        type: docking
+        heading_error: 8  # 도
+    user_command: "방향 맞춰"
+    expected_output:
+      tool: kaboat_align_heading
+      parameters:
+        correction: -8
+        tolerance: 2
+
+  - id: dock_012
+    name: 도킹 유지
+    context:
+      mission:
+        type: docking
+        status: docked
+    user_command: "도킹 상태 유지해"
+    expected_output:
+      tool: kaboat_hold_position
+      parameters:
+        mode: dock_hold
+        duration: -1  # 무한
+
+  # === 도킹 완료 및 이탈 (3개) ===
+  - id: dock_013
+    name: 도킹 상태 확인
+    context:
+      mission:
+        type: docking
+        status: approaching
+        distance_to_dock: 2.5
+    user_command: "도킹 됐어?"
+    expected_output:
+      tool: kaboat_get_status
+      parameters:
+        info_type: docking_status
+      reasoning: "아직 도킹 중. 목표까지 2.5m 남음"
+
+  - id: dock_014
+    name: 도킹 완료 보고
+    context:
+      mission:
+        type: docking
+        status: docked
+        bay_id: bay_1
+        duration: 30
+    user_command: "도킹 완료 보고"
+    expected_output:
+      tool: kaboat_submit_report
+      parameters:
+        mission_type: docking
+        result:
+          status: success
+          bay_id: bay_1
+          dock_time: 30
+
+  - id: dock_015
+    name: 도킹 해제 및 이탈
+    context:
+      mission:
+        type: docking
+        status: docked
+    user_command: "도킹 해제하고 나와"
+    expected_output:
+      tool: kaboat_undock
+      parameters:
+        exit_direction: backward
+        exit_distance: 10
+        speed: slow

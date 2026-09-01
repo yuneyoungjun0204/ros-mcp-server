@@ -1,0 +1,165 @@
+# Exception Handling Scenarios (10개)
+# 센서 이상, 위치 불확실, 미션 중단
+
+metadata:
+  category: exceptions
+  count: 10
+  description: 예외 상황 처리 시나리오
+
+scenarios:
+  # === 센서 이상 (4개) ===
+  - id: exc_001
+    name: LiDAR 데이터 없음
+    context:
+      sensors:
+        lidar:
+          status: no_data
+          front: -1
+          obstacles_detected: -1
+    user_command: "앞으로 가"
+    expected_output:
+      tool: kaboat_safe_mode
+      parameters:
+        reason: sensor_failure
+        action: reduce_speed
+        fallback: vision_only
+      reasoning: "LiDAR 데이터 없음. 안전 모드로 전환, 비전만으로 저속 운행"
+
+  - id: exc_002
+    name: GPS 신호 약함
+    context:
+      sensors:
+        gps:
+          status: weak_signal
+          accuracy: 15  # 미터 오차
+      mission:
+        type: waypoint_navigation
+    user_command: "계속 이동해"
+    expected_output:
+      tool: kaboat_navigate_to
+      parameters:
+        target: {type: waypoint, index: current}
+        speed: slow
+        gps_mode: dead_reckoning
+      reasoning: "GPS 정확도 낮음(15m). 추측 항법 병용, 저속 이동"
+
+  - id: exc_003
+    name: IMU 드리프트
+    context:
+      sensors:
+        imu:
+          status: drift_detected
+          heading_drift: 5  # 도/분
+    user_command: "헤딩 맞아?"
+    expected_output:
+      tool: kaboat_calibrate_sensor
+      parameters:
+        sensor: imu
+        method: gps_heading_fusion
+      reasoning: "IMU 드리프트 감지. GPS 헤딩과 융합하여 보정"
+
+  - id: exc_004
+    name: 카메라 시야 제한
+    context:
+      vision:
+        status: limited
+        description: "역광으로 전방 시야 불량"
+        visibility: low
+    user_command: "부표 찾아"
+    expected_output:
+      tool: kaboat_search_pattern
+      parameters:
+        target: buoy
+        pattern: zigzag
+        use_lidar: true
+      reasoning: "시야 제한으로 LiDAR 의존 탐색"
+
+  # === 위치 불확실 (3개) ===
+  - id: exc_005
+    name: 위치 확인 불가
+    context:
+      position:
+        x: null
+        y: null
+        confidence: 0.1
+    user_command: "지금 어디야?"
+    expected_output:
+      tool: kaboat_localize
+      parameters:
+        method: multi_sensor_fusion
+        reference_objects: [buoy, dock, landmark]
+      reasoning: "위치 불확실. 다중 센서 융합으로 재위치 추정"
+
+  - id: exc_006
+    name: 웨이포인트 이탈
+    context:
+      position: {x: 50, y: 30}
+      mission:
+        current_waypoint: {x: 0, y: 0}
+        path_deviation: 35  # 미터
+    user_command: "경로 벗어났어?"
+    expected_output:
+      tool: kaboat_replan_path
+      parameters:
+        from: current_position
+        to: current_waypoint
+      reasoning: "경로 이탈 35m. 현재 위치에서 새 경로 계획"
+
+  - id: exc_007
+    name: 미지 영역 진입
+    context:
+      position: {x: -600, y: 300}
+      map:
+        known_area: {x_min: -550, x_max: -450, y_min: 150, y_max: 250}
+    user_command: "이 근처 정보 없어?"
+    expected_output:
+      tool: kaboat_explore
+      parameters:
+        mode: cautious
+        map_while_moving: true
+        return_if_danger: true
+      reasoning: "알려지지 않은 영역. 탐색 모드로 전환"
+
+  # === 미션 중단 및 복구 (3개) ===
+  - id: exc_008
+    name: 미션 중단 요청
+    context:
+      mission:
+        type: gate_navigation
+        status: in_progress
+        progress: 0.6
+    user_command: "미션 중단해"
+    expected_output:
+      tool: kaboat_abort_mission
+      parameters:
+        save_progress: true
+        action: hold_position
+
+  - id: exc_009
+    name: 미션 재개
+    context:
+      mission:
+        type: gate_navigation
+        status: paused
+        progress: 0.6
+        last_checkpoint: gate_5
+    user_command: "미션 다시 시작해"
+    expected_output:
+      tool: kaboat_resume_mission
+      parameters:
+        from: last_checkpoint
+
+  - id: exc_010
+    name: 미션 실패 복구
+    context:
+      mission:
+        type: docking
+        status: failed
+        failure_reason: alignment_timeout
+    user_command: "다시 시도해"
+    expected_output:
+      tool: kaboat_retry_mission
+      parameters:
+        mission_type: docking
+        reset_position: true
+        attempt: 2

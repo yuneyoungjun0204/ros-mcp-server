@@ -1,0 +1,47 @@
+{
+  "source": "InspirationRobotics/RoboBoat_2025",
+  "model": "competition_model",
+  "nn_config": {
+    "output_format": "detection",
+    "NN_family": "YOLO",
+    "input_size": "640x352",
+    "classes": 25,
+    "iou_threshold": 0.5,
+    "confidence_threshold": 0.5
+  },
+  "labels": [
+    "black_buoy",
+    "black_circle",
+    "black_cross",
+    "black_triangle",
+    "blue_buoy",
+    "blue_circle",
+    "blue_cross",
+    "blue_racquet_ball",
+    "blue_triangle",
+    "dock",
+    "duck_image",
+    "green_buoy",
+    "green_cross",
+    "green_pole_buoy",
+    "green_triangle",
+    "misc_buoy",
+    "red_buoy",
+    "red_circle",
+    "red_cross",
+    "red_pole_buoy",
+    "red_racquet_ball",
+    "red_square",
+    "rubber_duck",
+    "yellow_buoy",
+    "yellow_racquet_ball"
+  ],
+  "label_colors": {
+    "black_buoy": [0, 0, 0],
+    "blue_buoy": [255, 0, 0],
+    "green_buoy": [0, 255, 0],
+    "red_buoy": [0, 0, 255],
+    "yellow_buoy": [0, 255, 255],
+    "dock": [128, 128, 128]
+  }
+}

@@ -1,0 +1,2149 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KABOAT Control Center</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Leaflet for satellite map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0c0f;
+            --bg-secondary: #12161c;
+            --bg-tertiary: #1a1f28;
+            --accent-blue: #2d7ff9;
+            --accent-cyan: #00c2cc;
+            --accent-green: #00d26a;
+            --accent-yellow: #e5a000;
+            --accent-red: #e53935;
+            --accent-purple: #7c4dff;
+            --text-primary: #e8eaed;
+            --text-secondary: #9aa0a6;
+            --text-muted: #5f6368;
+            --border: #282d35;
+            --shadow: 0 2px 4px rgba(0,0,0,0.4);
+            --shadow-lg: 0 4px 12px rgba(0,0,0,0.5);
+            --transition: all 0.2s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            font-size: 13px;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: var(--accent-cyan);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--bg-primary);
+            letter-spacing: -1px;
+        }
+
+        .logo h1 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: 0.5px;
+        }
+
+        .logo h1 span {
+            color: var(--accent-cyan);
+        }
+
+        .status-indicators {
+            display: flex;
+            gap: 20px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-red);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: var(--accent-green);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Main Layout */
+        .main {
+            display: grid;
+            grid-template-columns: 280px 1fr 320px;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 1400px) {
+            .main { grid-template-columns: 1fr 1fr; }
+            .sidebar-right { grid-column: span 2; }
+        }
+
+        @media (max-width: 900px) {
+            .main { grid-template-columns: 1fr; }
+            .sidebar-right { grid-column: span 1; }
+        }
+
+        /* Panels */
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .panel-header {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-tertiary);
+        }
+
+        .panel-header h2 {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .panel-header .icon {
+            font-size: 11px;
+            color: var(--accent-cyan);
+            font-weight: 700;
+        }
+
+        .panel-body {
+            padding: 16px 20px;
+        }
+
+        /* Launcher */
+        .launcher-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            margin: 8px 0;
+            background: var(--bg-primary);
+            border-radius: 12px;
+            border: 1px solid transparent;
+            transition: var(--transition);
+        }
+
+        .launcher-item:hover {
+            border-color: var(--accent-blue);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .launcher-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .launcher-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            transition: var(--transition);
+        }
+
+        .launcher-status.running {
+            background: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green);
+        }
+
+        .launcher-name {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .launcher-buttons {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            font-family: inherit;
+        }
+
+        .btn-icon {
+            padding: 8px 10px;
+            min-width: 36px;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: var(--accent-green);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        /* Boat Status */
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .status-card {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .status-card.highlight {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(6, 182, 212, 0.1));
+            border: 1px solid var(--accent-blue);
+        }
+
+        .status-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .status-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-cyan);
+        }
+
+        .status-value.warning {
+            color: var(--accent-yellow);
+        }
+
+        .status-value.danger {
+            color: var(--accent-red);
+        }
+
+        /* Compass */
+        .compass-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .compass {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, var(--bg-tertiary), var(--bg-primary), var(--bg-tertiary));
+            border: 3px solid var(--border);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .compass::before {
+            content: '';
+            position: absolute;
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            background: var(--bg-primary);
+        }
+
+        .compass-needle {
+            position: absolute;
+            width: 4px;
+            height: 70px;
+            background: linear-gradient(to top, var(--accent-red) 50%, var(--text-primary) 50%);
+            border-radius: 2px;
+            transform-origin: bottom center;
+            transition: transform 0.5s ease-out;
+            z-index: 10;
+            bottom: 50%;
+        }
+
+        .compass-center {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: var(--accent-cyan);
+            border-radius: 50%;
+            z-index: 11;
+            box-shadow: 0 0 15px var(--accent-cyan);
+        }
+
+        .compass-labels {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .compass-labels span {
+            position: absolute;
+        }
+
+        .compass-labels .n { top: 8px; left: 50%; transform: translateX(-50%); color: var(--accent-red); }
+        .compass-labels .e { right: 8px; top: 50%; transform: translateY(-50%); }
+        .compass-labels .s { bottom: 8px; left: 50%; transform: translateX(-50%); }
+        .compass-labels .w { left: 8px; top: 50%; transform: translateY(-50%); }
+
+        .heading-display {
+            margin-top: 16px;
+            font-size: 2rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-cyan);
+        }
+
+        /* LiDAR Canvas */
+        .lidar-container {
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        #lidar-canvas {
+            background: radial-gradient(circle, var(--bg-primary) 0%, #0a0f1a 100%);
+            border-radius: 50%;
+            border: 2px solid var(--border);
+        }
+
+        /* Camera & Vision Panels */
+        .camera-container {
+            position: relative;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #camera-image {
+            width: 100%;
+            height: auto;
+            display: block;
+            min-height: 150px;
+            background: #0a0f1a;
+        }
+
+        .camera-status {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            padding: 4px 8px;
+            background: rgba(0,0,0,0.7);
+            border-radius: 4px;
+            font-size: 10px;
+            color: var(--text-secondary);
+        }
+
+        .camera-status.live {
+            color: var(--accent-green);
+        }
+
+        .vision-panel {
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 12px;
+        }
+
+        .vision-response {
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .vision-response.has-response {
+            color: var(--accent-yellow);
+        }
+
+        .vision-timestamp {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+
+        .gemini-image-preview {
+            width: 100%;
+            max-height: 100px;
+            object-fit: contain;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            border: 1px solid var(--border);
+        }
+
+        /* 2D Map */
+        .map-container {
+            position: relative;
+            width: 100%;
+            height: 450px;
+            background: linear-gradient(135deg, #0a0f1a 0%, var(--bg-primary) 100%);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        #leaflet-map {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #map-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .map-toggle {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 4px;
+            background: rgba(15, 23, 42, 0.9);
+            padding: 4px;
+            border-radius: 8px;
+        }
+
+        .map-toggle button {
+            padding: 6px 12px;
+            font-size: 11px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: transparent;
+            color: var(--text-secondary);
+        }
+
+        .map-toggle button.active {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .map-legend {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(15, 23, 42, 0.9);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 4px 0;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .map-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(15, 23, 42, 0.9);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Control Pad */
+        .control-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            gap: 8px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .control-pad .btn {
+            width: 60px;
+            height: 60px;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .control-pad .center {
+            background: var(--accent-red);
+        }
+
+        /* Action Buttons */
+        .action-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .action-grid .btn {
+            padding: 14px;
+            font-size: 0.9rem;
+        }
+
+        /* Mission Select */
+        .select-wrapper {
+            position: relative;
+            margin-bottom: 16px;
+        }
+
+        .select-wrapper select {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-family: inherit;
+            cursor: pointer;
+            appearance: none;
+            transition: var(--transition);
+        }
+
+        .select-wrapper select:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .select-wrapper::after {
+            content: '▼';
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            pointer-events: none;
+        }
+
+        /* Input */
+        .input-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .input-row input {
+            flex: 1;
+            padding: 12px 16px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: var(--transition);
+        }
+
+        .input-row input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .input-row input::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Log */
+        .log-container {
+            height: 200px;
+            overflow-y: auto;
+            background: var(--bg-primary);
+            border-radius: 12px;
+            padding: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        .log-entry {
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            min-width: 70px;
+        }
+
+        .log-message { color: var(--text-secondary); }
+        .log-message.action { color: var(--accent-green); }
+        .log-message.llm { color: var(--accent-yellow); }
+        .log-message.error { color: var(--accent-red); }
+        .log-message.info { color: var(--accent-cyan); }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transform: translateX(400px);
+            transition: var(--transition);
+            z-index: 1000;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast.success { border-color: var(--accent-green); }
+        .toast.error { border-color: var(--accent-red); }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">KB</div>
+            <h1><span>KABOAT</span> CONTROL</h1>
+        </div>
+        <div class="status-indicators">
+            <div class="status-badge">
+                <div class="status-dot" id="ros-dot"></div>
+                <span>ROS <span id="ros-status">연결 중...</span></span>
+            </div>
+            <div class="status-badge">
+                <div class="status-dot" id="backend-dot"></div>
+                <span>Backend <span id="backend-status">연결 중...</span></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Left Sidebar - Launcher -->
+        <aside class="sidebar-left">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="icon">[SYS]</span>
+                    <h2>SYSTEM LAUNCHER</h2>
+                </div>
+                <div class="panel-body">
+                    <div id="launcher-list"></div>
+                    <div class="btn-group">
+                        <button class="btn btn-success" onclick="launchAll()">
+                            START ALL
+                        </button>
+                        <button class="btn btn-danger" onclick="stopAll()">
+                            STOP ALL
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <span class="icon">[MSN]</span>
+                    <h2>MISSION CONTROL</h2>
+                </div>
+                <div class="panel-body">
+                    <!-- 풀 미션 (기본) -->
+                    <button class="btn btn-success" style="width:100%; padding:16px; font-size:1rem; margin-bottom:16px;" onclick="startFullMission()">
+                        FULL MISSION START
+                    </button>
+
+                    <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 12px;">또는 개별 미션:</div>
+                    <div class="select-wrapper">
+                        <select id="mission-select">
+                            <option value="gate_search">GATE SEARCH</option>
+                            <option value="buoy_orbit">BUOY ORBIT</option>
+                            <option value="hopping_tour">HOPPING TOUR</option>
+                            <option value="docking">DOCKING</option>
+                            <option value="free_navigation">FREE NAV</option>
+                        </select>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="startMission()">RUN MISSION</button>
+                        <button class="btn btn-secondary" onclick="sendAction({action:'mission_phase_done'})">Phase 완료</button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center - Main Display -->
+        <section class="center-content">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="icon">[STS]</span>
+                    <h2>VESSEL STATUS</h2>
+                </div>
+                <div class="panel-body">
+                    <div class="status-grid">
+                        <div class="status-card highlight">
+                            <div class="status-label">위치 X</div>
+                            <div class="status-value" id="pos-x">--</div>
+                        </div>
+                        <div class="status-card highlight">
+                            <div class="status-label">위치 Y</div>
+                            <div class="status-value" id="pos-y">--</div>
+                        </div>
+                        <div class="status-card">
+                            <div class="status-label">전방 장애물</div>
+                            <div class="status-value" id="obs-front">--</div>
+                        </div>
+                        <div class="status-card">
+                            <div class="status-label">최근접 장애물</div>
+                            <div class="status-value" id="obs-closest">--</div>
+                        </div>
+                        <div class="status-card">
+                            <div class="status-label">현재 액션</div>
+                            <div class="status-value" id="current-action" style="font-size:1rem;">대기</div>
+                        </div>
+                        <div class="status-card">
+                            <div class="status-label">Decision</div>
+                            <div class="status-value" id="decision-needed">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Control Status -->
+                    <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);">
+                        <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">[CTL] CONTROL</div>
+                        <div class="status-grid" style="grid-template-columns: repeat(2, 1fr);">
+                            <div class="status-card highlight">
+                                <div class="status-label">PSI ERROR</div>
+                                <div class="status-value" id="psi-error" style="color: var(--accent-yellow);">--°</div>
+                            </div>
+                            <div class="status-card highlight">
+                                <div class="status-label">THRUST</div>
+                                <div class="status-value" id="thrust-value" style="color: var(--accent-cyan);">--</div>
+                            </div>
+                            <div class="status-card">
+                                <div class="status-label">GOAL HDG</div>
+                                <div class="status-value" id="goal-heading">--°</div>
+                            </div>
+                            <div class="status-card">
+                                <div class="status-label">WP DIST</div>
+                                <div class="status-value" id="wp-distance">--m</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+                <!-- Compass -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <span class="icon">[HDG]</span>
+                        <h2>HEADING</h2>
+                    </div>
+                    <div class="compass-container">
+                        <div class="compass">
+                            <div class="compass-labels">
+                                <span class="n">N</span>
+                                <span class="e">E</span>
+                                <span class="s">S</span>
+                                <span class="w">W</span>
+                            </div>
+                            <div class="compass-needle" id="compass-needle"></div>
+                            <div class="compass-center"></div>
+                        </div>
+                        <div class="heading-display"><span id="heading-value">0</span>°</div>
+                    </div>
+                </div>
+
+                <!-- LiDAR -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <span class="icon">[LDR]</span>
+                        <h2>LiDAR</h2>
+                        <span id="cluster-mode" style="margin-left: auto; font-size: 9px; padding: 2px 6px; border-radius: 3px; background: var(--bg-primary); color: var(--text-muted);">--</span>
+                    </div>
+                    <div class="lidar-container">
+                        <canvas id="lidar-canvas" width="200" height="200"></canvas>
+                    </div>
+                    <div id="cluster-info" style="padding: 8px 12px; border-top: 1px solid var(--border); font-size: 10px; max-height: 100px; overflow-y: auto;">
+                        <div style="color: var(--text-muted);">클러스터: cluster_visualizer 필요</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Camera & Gemini Vision Row - 개선된 레이아웃 -->
+            <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-top: 16px;">
+                <!-- Camera Feed with Controls -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <span class="icon">[CAM]</span>
+                        <h2>CAMERA</h2>
+                        <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
+                            <label style="font-size: 11px; display: flex; align-items: center; gap: 4px;">
+                                <input type="checkbox" id="auto-analyze-toggle" onchange="toggleAutoAnalyze()">
+                                자동분석
+                            </label>
+                            <select id="auto-analyze-interval" style="font-size: 10px; padding: 2px 4px; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;">
+                                <option value="3000">3초</option>
+                                <option value="5000" selected>5초</option>
+                                <option value="10000">10초</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="panel-body" style="padding: 12px;">
+                        <div class="camera-container" style="position: relative;">
+                            <img id="camera-image" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Camera Feed">
+                            <div class="camera-status" id="camera-status">대기 중...</div>
+                            <canvas id="detection-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
+                        </div>
+                        <div style="margin-top: 8px; font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between;">
+                            <span>FPS: <span id="camera-fps">0</span> | Size: <span id="camera-size">--</span></span>
+                            <span id="auto-analyze-status" style="color: var(--text-muted);">자동분석 OFF</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gemini Vision - 확대된 응답 영역 -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <span class="icon">[AI]</span>
+                        <h2>AI VISION</h2>
+                        <span id="gemini-latency" style="margin-left: auto; font-size: 10px; color: var(--accent-cyan);">--</span>
+                    </div>
+                    <div class="panel-body" style="padding: 12px;">
+                        <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                            <div style="flex: 0 0 140px;">
+                                <img id="gemini-image" class="gemini-image-preview" style="max-height: 120px;" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Sent to Gemini">
+                                <div style="font-size: 9px; color: var(--text-muted); text-align: center;">분석 이미지</div>
+                            </div>
+                            <div style="flex: 1; display: flex; flex-direction: column;">
+                                <div class="vision-response" id="gemini-response" style="flex: 1; min-height: 100px; max-height: 150px; overflow-y: auto; font-size: 12px; line-height: 1.5;">
+                                    Gemini 응답 대기 중...
+                                </div>
+                                <div class="vision-timestamp" id="gemini-timestamp">--</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-primary" style="flex: 1;" onclick="sendImageToGemini()">
+                                🔍 AI 분석
+                            </button>
+                            <button class="btn" style="flex: 1; background: var(--accent-cyan); color: var(--bg-primary);" onclick="detectBuoysHSV()">
+                                🎨 HSV 감지
+                            </button>
+                        </div>
+                        <div id="hsv-results" style="margin-top: 8px; font-size: 11px; color: var(--text-muted); display: none;">
+                            <div style="font-weight: 600; margin-bottom: 4px;">HSV 감지 결과:</div>
+                            <div id="hsv-detections"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2D Map -->
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <span class="icon">[MAP]</span>
+                    <h2>MISSION MAP</h2>
+                </div>
+                <div class="panel-body" style="padding: 0;">
+                    <div class="map-container">
+                        <div class="map-toggle">
+                            <button id="btn-satellite" class="active" onclick="setMapType('satellite')">위성</button>
+                            <button id="btn-street" onclick="setMapType('street')">지도</button>
+                            <button id="btn-dark" onclick="setMapType('dark')">다크</button>
+                        </div>
+                        <div id="leaflet-map"></div>
+                        <canvas id="map-canvas"></canvas>
+                        <div class="map-legend">
+                            <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>보트</div>
+                            <div class="legend-item"><div class="legend-dot" style="background:#ff6b6b"></div>게이트</div>
+                            <div class="legend-item"><div class="legend-dot" style="background:#ffd93d"></div>부표</div>
+                            <div class="legend-item"><div class="legend-dot" style="background:#6bcb77"></div>호핑</div>
+                            <div class="legend-item"><div class="legend-dot" style="background:#4d96ff"></div>도킹</div>
+                            <div class="legend-item"><div class="legend-dot" style="background:#ff00ff"></div>LLM 경로</div>
+                            <div class="legend-item"><div class="legend-dot" style="background:#00ff64"></div>클러스터</div>
+                            <div style="font-size:9px;color:var(--text-muted);margin-top:6px;">드래그: 이동 | 스크롤: 줌</div>
+                        </div>
+                        <div class="map-info">
+                            <div>LLM: <span id="llm-goal">--</span></div>
+                            <button onclick="clearLLMHistory()" style="margin-top:8px; padding:4px 8px; font-size:10px; background:var(--bg-tertiary); border:none; color:var(--text-secondary); border-radius:4px; cursor:pointer;">경로 초기화</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log -->
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <span class="icon">[LOG]</span>
+                    <h2>SYSTEM LOG</h2>
+                </div>
+                <div class="panel-body">
+                    <div class="log-container" id="log"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Sidebar - Controls -->
+        <aside class="sidebar-right">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="icon">[CTL]</span>
+                    <h2>MANUAL CONTROL</h2>
+                </div>
+                <div class="panel-body">
+                    <div class="control-pad">
+                        <div></div>
+                        <button class="btn btn-primary" onclick="sendAction({action:'move_forward',duration:2})">↑</button>
+                        <div></div>
+                        <button class="btn btn-primary" onclick="sendAction({action:'turn_left',angle:30})">←</button>
+                        <button class="btn center" onclick="sendAction({action:'stop'})">■</button>
+                        <button class="btn btn-primary" onclick="sendAction({action:'turn_right',angle:30})">→</button>
+                        <div></div>
+                        <button class="btn btn-primary" onclick="sendAction({action:'backward',duration:2})">↓</button>
+                        <div></div>
+                    </div>
+
+                    <div class="action-grid">
+                        <button class="btn btn-secondary" onclick="sendAction({action:'dorodori',duration:8})">🔍 탐색</button>
+                        <button class="btn btn-secondary" onclick="sendAction({action:'hold',duration:5})">⏸ 대기</button>
+                        <button class="btn btn-secondary" onclick="sendAction({action:'turn_left',angle:90})">↩ 90° 좌</button>
+                        <button class="btn btn-secondary" onclick="sendAction({action:'turn_right',angle:90})">↪ 90° 우</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <span class="icon">[NAV]</span>
+                    <h2>WAYPOINT NAV</h2>
+                </div>
+                <div class="panel-body">
+                    <div class="input-row">
+                        <input type="number" id="wp-x" placeholder="X 좌표">
+                        <input type="number" id="wp-y" placeholder="Y 좌표">
+                    </div>
+                    <button class="btn btn-primary" style="width:100%;" onclick="navigateTo()">
+                        GO
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <span class="icon">[!]</span>
+                    <h2>EMERGENCY</h2>
+                </div>
+                <div class="panel-body">
+                    <button class="btn btn-danger" style="width:100%; padding:20px; font-size:1.1rem; margin-bottom:10px;" onclick="emergencyStop()">
+                        EMERGENCY STOP
+                    </button>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-secondary" style="flex:1;" onclick="releaseBoat()">
+                            RELEASE
+                        </button>
+                        <button class="btn btn-secondary" style="flex:1;" onclick="unpauseSim()">
+                            UNPAUSE
+                        </button>
+                    </div>
+                    <div style="font-size:10px; color:var(--text-muted); margin-top:8px;">
+                        시작 후 보트가 안 움직이면 "보트 해제" 클릭
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Toast -->
+    <div class="toast" id="toast">
+        <span id="toast-message"></span>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        let ros = null;
+
+        const LAUNCHERS = [
+            { id: 'simulator', name: 'SIMULATOR', icon: '' },
+            { id: 'rosbridge', name: 'ROS BRIDGE', icon: '' },
+            { id: 'autonomous_viz', name: 'AUTONOMOUS', icon: '' },
+            { id: 'action_dispatcher', name: 'DISPATCHER', icon: '' },
+            { id: 'llm_interface', name: 'LLM IFACE', icon: '' },
+            { id: 'cluster_visualizer', name: 'CLUSTER VIZ', icon: '' },
+            { id: 'camera_bridge', name: '📷 CAMERA', icon: '' },
+            { id: 'image_republish', name: '🔄 COMPRESS', icon: '' },
+            { id: 'yolo_detector', name: 'YOLO DETECT', icon: '' },
+        ];
+
+        // Initialize launchers
+        function initLaunchers() {
+            const container = document.getElementById('launcher-list');
+            container.innerHTML = LAUNCHERS.map(l => `
+                <div class="launcher-item" id="launcher-${l.id}">
+                    <div class="launcher-info">
+                        <div class="launcher-status" id="status-${l.id}"></div>
+                        <span class="launcher-name">${l.icon} ${l.name}</span>
+                    </div>
+                    <div class="launcher-buttons">
+                        <button class="btn btn-icon btn-success" onclick="launchProcess('${l.id}')" title="시작">▶</button>
+                        <button class="btn btn-icon btn-danger" onclick="stopProcess('${l.id}')" title="중지">■</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Backend status
+        async function checkBackendStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/status`);
+                if (res.ok) {
+                    document.getElementById('backend-status').textContent = '연결됨';
+                    document.getElementById('backend-dot').classList.add('connected');
+                    updateLauncherStatus(await res.json());
+                    return true;
+                }
+            } catch (e) {}
+            document.getElementById('backend-status').textContent = '오프라인';
+            document.getElementById('backend-dot').classList.remove('connected');
+            return false;
+        }
+
+        function updateLauncherStatus(status) {
+            for (const [id, info] of Object.entries(status)) {
+                const el = document.getElementById(`status-${id}`);
+                if (el) {
+                    el.classList.toggle('running', info.running);
+                }
+            }
+        }
+
+        async function launchProcess(name) {
+            addLog(`${name} 시작 중...`, 'info');
+            try {
+                const res = await fetch(`${API_BASE}/launch/${name}`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'started') {
+                    showToast(`${name} 시작됨`, 'success');
+                    addLog(`${name}: PID ${data.pid}`, 'action');
+                } else {
+                    addLog(`${name}: ${data.status}`, 'info');
+                }
+                checkBackendStatus();
+            } catch (e) {
+                addLog(`${name} 시작 실패`, 'error');
+                showToast('시작 실패', 'error');
+            }
+        }
+
+        async function stopProcess(name) {
+            try {
+                const res = await fetch(`${API_BASE}/stop/${name}`, { method: 'POST' });
+                const data = await res.json();
+                addLog(`${name}: ${data.status}`, 'action');
+                showToast(`${name} 중지됨`, 'success');
+                checkBackendStatus();
+            } catch (e) {
+                addLog(`${name} 중지 실패`, 'error');
+            }
+        }
+
+        async function launchAll() {
+            showToast('전체 시작 중...', 'info');
+            for (const l of LAUNCHERS) {
+                await launchProcess(l.id);
+                await new Promise(r => setTimeout(r, 2000));
+            }
+            showToast('전체 시작 완료', 'success');
+        }
+
+        async function stopAll() {
+            try {
+                await fetch(`${API_BASE}/stop_all`, { method: 'POST' });
+                addLog('전체 중지 완료', 'action');
+                showToast('전체 중지 완료', 'success');
+                checkBackendStatus();
+            } catch (e) {
+                showToast('중지 실패', 'error');
+            }
+        }
+
+        async function startMission() {
+            const missionType = document.getElementById('mission-select').value;
+            addLog(`개별 미션 시작: ${missionType}`, 'llm');
+            showToast(`${missionType} 미션 시작`, 'success');
+            try {
+                await fetch(`${API_BASE}/launch/gemini_mission`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mission_type: missionType })
+                });
+            } catch (e) {
+                addLog('미션 시작 실패', 'error');
+            }
+        }
+
+        async function startFullMission() {
+            addLog('★ 풀 미션 시작: 게이트→부표→호핑→도킹', 'llm');
+            showToast('풀 미션 시작!', 'success');
+            try {
+                const res = await fetch(`${API_BASE}/launch/full_mission`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'started') {
+                    addLog(`풀 미션 실행 중 (PID: ${data.pid})`, 'action');
+                } else {
+                    addLog(`풀 미션: ${data.status}`, 'info');
+                }
+            } catch (e) {
+                addLog('풀 미션 시작 실패', 'error');
+                showToast('풀 미션 시작 실패', 'error');
+            }
+        }
+
+        // ROS Connection
+        function connectROS() {
+            ros = new ROSLIB.Ros({ url: 'ws://localhost:9090' });
+
+            ros.on('connection', () => {
+                document.getElementById('ros-status').textContent = '연결됨';
+                document.getElementById('ros-dot').classList.add('connected');
+                addLog('ROS 연결 성공', 'action');
+                subscribeTopics();
+            });
+
+            ros.on('error', () => {
+                document.getElementById('ros-status').textContent = '오류';
+                document.getElementById('ros-dot').classList.remove('connected');
+            });
+
+            ros.on('close', () => {
+                document.getElementById('ros-status').textContent = '오프라인';
+                document.getElementById('ros-dot').classList.remove('connected');
+                setTimeout(connectROS, 3000);
+            });
+        }
+
+        function subscribeTopics() {
+            new ROSLIB.Topic({ ros, name: '/boat_status', messageType: 'std_msgs/String' })
+                .subscribe(msg => {
+                    try {
+                        const data = JSON.parse(msg.data);
+                        const pos = data.position || {};
+                        const obs = data.obstacles || {};
+
+                        document.getElementById('pos-x').textContent = pos.x?.toFixed(1) ?? '--';
+                        document.getElementById('pos-y').textContent = pos.y?.toFixed(1) ?? '--';
+
+                        const front = obs.front?.toFixed(1) ?? '--';
+                        const frontEl = document.getElementById('obs-front');
+                        frontEl.textContent = front + 'm';
+                        frontEl.className = 'status-value' + (obs.front < 5 ? ' danger' : obs.front < 10 ? ' warning' : '');
+
+                        const closest = obs.closest?.toFixed(1) ?? '--';
+                        const closestEl = document.getElementById('obs-closest');
+                        closestEl.textContent = closest + 'm';
+                        closestEl.className = 'status-value' + (obs.closest < 3 ? ' danger' : obs.closest < 8 ? ' warning' : '');
+
+                        // Compass
+                        const heading = pos.heading_deg ?? 0;
+                        document.getElementById('heading-value').textContent = heading.toFixed(0);
+                        document.getElementById('compass-needle').style.transform = `rotate(${heading}deg)`;
+
+                        // Control status (psi_error, thrust, goal heading, wp distance)
+                        const cmd = data.command || {};
+                        const wp = data.waypoint || {};
+
+                        const psiError = cmd.psi_error_deg;
+                        const psiEl = document.getElementById('psi-error');
+                        psiEl.textContent = psiError !== undefined ? psiError.toFixed(1) + '°' : '--°';
+                        psiEl.style.color = Math.abs(psiError || 0) > 30 ? 'var(--accent-red)' :
+                                           Math.abs(psiError || 0) > 15 ? 'var(--accent-yellow)' : 'var(--accent-green)';
+
+                        document.getElementById('thrust-value').textContent =
+                            cmd.thrust !== undefined ? cmd.thrust.toFixed(0) : '--';
+
+                        // Goal heading = current heading + psi_error
+                        const goalHdg = psiError !== undefined ? (heading + psiError + 360) % 360 : null;
+                        document.getElementById('goal-heading').textContent =
+                            goalHdg !== null ? goalHdg.toFixed(0) + '°' : '--°';
+
+                        document.getElementById('wp-distance').textContent =
+                            wp.distance_m !== undefined ? wp.distance_m.toFixed(1) + 'm' : '--m';
+
+                        // 2D 맵 업데이트
+                        updateBoatOnMap(data);
+                    } catch (e) {}
+                });
+
+            // LLM 액션 구독 (목표점 표시용)
+            subscribeLLMAction();
+
+            // 카메라 이미지 구독
+            subscribeCameraImage();
+
+            new ROSLIB.Topic({ ros, name: '/action_status', messageType: 'std_msgs/String' })
+                .subscribe(msg => {
+                    try {
+                        const data = JSON.parse(msg.data);
+                        document.getElementById('current-action').textContent = data.current_action || '대기';
+                        const dn = data.decision_needed;
+                        const dnEl = document.getElementById('decision-needed');
+                        dnEl.textContent = dn ? 'YES' : 'NO';
+                        dnEl.className = 'status-value' + (dn ? ' warning' : '');
+                    } catch (e) {}
+                });
+
+            new ROSLIB.Topic({ ros, name: '/wamv/sensors/lidar/scan', messageType: 'sensor_msgs/LaserScan' })
+                .subscribe(msg => {
+                    drawLidar(msg.ranges);
+                    updateLidarOnMap(msg.ranges);
+                });
+
+            // LiDAR 클러스터 (cluster_visualizer 노드 필요)
+            new ROSLIB.Topic({ ros, name: '/lidar_clusters', messageType: 'std_msgs/String' })
+                .subscribe(msg => {
+                    try {
+                        const data = JSON.parse(msg.data);
+                        clusterData.mode = data.mode;
+                        clusterData.stable = data.stable || [];
+                        updateClusterInfo();
+                        drawMapOverlay();
+                    } catch (e) {}
+                });
+        }
+
+        // LiDAR visualization
+        const canvas = document.getElementById('lidar-canvas');
+        const ctx = canvas.getContext('2d');
+
+        function drawLidar(ranges) {
+            const w = canvas.width, h = canvas.height;
+            const cx = w / 2, cy = h / 2;
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.3)';
+            ctx.fillRect(0, 0, w, h);
+
+            // Grid rings
+            ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
+            ctx.lineWidth = 1;
+            for (let r = 20; r <= 80; r += 20) {
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Boat icon
+            ctx.fillStyle = '#10b981';
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - 8);
+            ctx.lineTo(cx - 5, cy + 5);
+            ctx.lineTo(cx + 5, cy + 5);
+            ctx.closePath();
+            ctx.fill();
+
+            // LiDAR points
+            const scale = 2;
+            for (let i = 0; i < ranges.length; i++) {
+                const r = ranges[i];
+                if (r > 0.1 && r < 40) {
+                    const angle = (i / ranges.length) * Math.PI * 2 - Math.PI / 2;
+                    const x = cx + Math.cos(angle) * r * scale;
+                    const y = cy + Math.sin(angle) * r * scale;
+
+                    const intensity = Math.max(0, 1 - r / 40);
+                    ctx.fillStyle = `rgba(6, 182, 212, ${0.3 + intensity * 0.7})`;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        // ===== Camera & Gemini Vision =====
+        let currentImageData = null;
+        let cameraFrameCount = 0;
+        let lastFpsUpdate = Date.now();
+        let autoAnalyzeTimer = null;
+        let isAutoAnalyzing = false;
+
+        function subscribeCameraImage() {
+            if (!ros?.isConnected) return;
+
+            // Compressed 이미지 토픽 구독 (JPEG)
+            const cameraTopic = new ROSLIB.Topic({
+                ros,
+                name: '/wamv/sensors/camera/image_raw/compressed',
+                messageType: 'sensor_msgs/CompressedImage'
+            });
+
+            cameraTopic.subscribe(msg => {
+                try {
+                    const imageData = 'data:image/jpeg;base64,' + msg.data;
+                    document.getElementById('camera-image').src = imageData;
+                    currentImageData = imageData;
+
+                    document.getElementById('camera-status').textContent = 'LIVE';
+                    document.getElementById('camera-status').className = 'camera-status live';
+
+                    cameraFrameCount++;
+                    const now = Date.now();
+                    if (now - lastFpsUpdate >= 1000) {
+                        document.getElementById('camera-fps').textContent = cameraFrameCount;
+                        cameraFrameCount = 0;
+                        lastFpsUpdate = now;
+                    }
+
+                    document.getElementById('camera-size').textContent =
+                        Math.round(msg.data.length * 0.75 / 1024) + 'KB';
+                } catch (e) {
+                    console.error('Camera error:', e);
+                }
+            });
+
+            addLog('카메라 구독 시작', 'info');
+        }
+
+        async function sendImageToGemini(customPrompt = null) {
+            if (!currentImageData) {
+                showToast('카메라 이미지 없음', 'error');
+                return;
+            }
+
+            // 전송된 이미지 표시
+            document.getElementById('gemini-image').src = currentImageData;
+            document.getElementById('gemini-response').textContent = '분석 중...';
+            document.getElementById('gemini-response').className = 'vision-response';
+            document.getElementById('gemini-latency').textContent = '분석중...';
+
+            const prompt = customPrompt || '이 이미지에서 부표, 게이트, 장애물, 도킹 스테이션 등 KABOAT 미션과 관련된 물체를 찾아 설명해주세요. 색상, 위치, 거리를 포함하세요.';
+            addLog('Gemini Vision 요청 중...', 'llm');
+
+            try {
+                const res = await fetch(`${API_BASE}/analyze_image`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: currentImageData.split(',')[1],
+                        prompt: prompt
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.response) {
+                    document.getElementById('gemini-response').textContent = data.response;
+                    document.getElementById('gemini-response').className = 'vision-response has-response';
+                    document.getElementById('gemini-timestamp').textContent =
+                        new Date().toLocaleTimeString();
+                    document.getElementById('gemini-latency').textContent = data.latency_ms + 'ms';
+                    document.getElementById('gemini-latency').style.color =
+                        data.latency_ms < 1000 ? 'var(--accent-green)' :
+                        data.latency_ms < 2000 ? 'var(--accent-yellow)' : 'var(--accent-red)';
+                    addLog(`Gemini: ${data.response.substring(0, 50)}...`, 'llm');
+                } else {
+                    document.getElementById('gemini-response').textContent = '오류: ' + (data.error || '알 수 없음');
+                    document.getElementById('gemini-latency').textContent = 'ERROR';
+                    document.getElementById('gemini-latency').style.color = 'var(--accent-red)';
+                    addLog('Gemini 오류: ' + data.error, 'error');
+                }
+            } catch (e) {
+                document.getElementById('gemini-response').textContent = '요청 실패: ' + e.message;
+                document.getElementById('gemini-latency').textContent = 'FAIL';
+                addLog('Gemini 요청 실패', 'error');
+            }
+        }
+
+        function toggleAutoAnalyze() {
+            const toggle = document.getElementById('auto-analyze-toggle');
+            const statusEl = document.getElementById('auto-analyze-status');
+            const interval = parseInt(document.getElementById('auto-analyze-interval').value);
+
+            if (toggle.checked) {
+                isAutoAnalyzing = true;
+                statusEl.textContent = '자동분석 ON (' + (interval/1000) + '초)';
+                statusEl.style.color = 'var(--accent-green)';
+                autoAnalyzeTimer = setInterval(() => {
+                    if (currentImageData && isAutoAnalyzing) {
+                        sendImageToGemini('부표, 게이트, 장애물의 색상과 위치를 간단히 알려줘. 한국어로 짧게.');
+                    }
+                }, interval);
+                addLog('자동 분석 시작 (' + (interval/1000) + '초)', 'info');
+            } else {
+                isAutoAnalyzing = false;
+                if (autoAnalyzeTimer) {
+                    clearInterval(autoAnalyzeTimer);
+                    autoAnalyzeTimer = null;
+                }
+                statusEl.textContent = '자동분석 OFF';
+                statusEl.style.color = 'var(--text-muted)';
+                addLog('자동 분석 중지', 'info');
+            }
+        }
+
+        async function detectBuoysHSV() {
+            if (!currentImageData) {
+                showToast('카메라 이미지 없음', 'error');
+                return;
+            }
+
+            document.getElementById('hsv-results').style.display = 'block';
+            document.getElementById('hsv-detections').textContent = '감지 중...';
+            addLog('HSV 부표 감지 요청...', 'info');
+
+            try {
+                const res = await fetch(`${API_BASE}/detect_buoys`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: currentImageData.split(',')[1],
+                        colors: ['red', 'green', 'blue', 'yellow', 'black']
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    document.getElementById('hsv-detections').textContent = '오류: ' + data.error;
+                    addLog('HSV 오류: ' + data.error, 'error');
+                    return;
+                }
+
+                // 결과 표시
+                if (data.detections && data.detections.length > 0) {
+                    const colorEmoji = {red: '🔴', green: '🟢', blue: '🔵', yellow: '🟡', black: '⚫'};
+                    let html = data.detections.map(d =>
+                        `<span style="margin-right: 8px;">${colorEmoji[d.color] || '●'} ${d.color} (x=${d.normalized_x.toFixed(2)}, area=${d.area})</span>`
+                    ).join('');
+                    html += `<br><span style="color: var(--accent-cyan);">${data.latency_ms}ms</span>`;
+                    document.getElementById('hsv-detections').innerHTML = html;
+
+                    // 시각화 이미지 표시
+                    if (data.visualized_image) {
+                        document.getElementById('gemini-image').src = 'data:image/jpeg;base64,' + data.visualized_image;
+                    }
+
+                    addLog(`HSV 감지: ${data.count}개 부표 (${data.latency_ms}ms)`, 'info');
+                } else {
+                    document.getElementById('hsv-detections').innerHTML =
+                        `부표 없음 <span style="color: var(--accent-cyan);">(${data.latency_ms}ms)</span>`;
+                    addLog('HSV: 부표 없음', 'info');
+                }
+            } catch (e) {
+                document.getElementById('hsv-detections').textContent = '요청 실패: ' + e.message;
+                addLog('HSV 요청 실패', 'error');
+            }
+        }
+
+        // Actions
+        const actionPub = () => new ROSLIB.Topic({ ros, name: '/llm_action', messageType: 'std_msgs/String' });
+
+        function sendAction(action) {
+            if (!ros?.isConnected) {
+                showToast('ROS 연결 안됨', 'error');
+                return;
+            }
+            actionPub().publish(new ROSLIB.Message({ data: JSON.stringify(action) }));
+            addLog(`액션: ${action.action}`, 'action');
+        }
+
+        function navigateTo() {
+            const x = parseFloat(document.getElementById('wp-x').value);
+            const y = parseFloat(document.getElementById('wp-y').value);
+            if (!isNaN(x) && !isNaN(y)) {
+                sendAction({ action: 'navigate_avoid', goal_x: x, goal_y: y });
+                showToast(`(${x}, ${y})로 이동`, 'success');
+            } else {
+                showToast('좌표를 입력하세요', 'error');
+            }
+        }
+
+        function emergencyStop() {
+            sendAction({ action: 'stop' });
+            showToast('긴급 정지!', 'error');
+            addLog('EMERGENCY STOP 실행', 'error');
+        }
+
+        async function releaseBoat() {
+            addLog('보트 해제 중...', 'info');
+            try {
+                const res = await fetch(`${API_BASE}/release_boat`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'released') {
+                    showToast('보트 해제 완료', 'success');
+                    addLog('○ 보트 플랫폼에서 해제됨', 'action');
+                } else {
+                    addLog('보트 해제 실패: ' + data.message, 'error');
+                }
+            } catch (e) {
+                addLog('보트 해제 오류', 'error');
+            }
+        }
+
+        async function unpauseSim() {
+            addLog('시뮬레이션 재개 중...', 'info');
+            try {
+                const res = await fetch(`${API_BASE}/unpause_sim`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'unpaused') {
+                    showToast('시뮬레이션 재개됨', 'success');
+                    addLog('▶ 시뮬레이션 unpause', 'action');
+                } else {
+                    addLog('Unpause 실패: ' + data.message, 'error');
+                }
+            } catch (e) {
+                addLog('Unpause 오류', 'error');
+            }
+        }
+
+        // Log
+        function addLog(message, type = '') {
+            const log = document.getElementById('log');
+            const time = new Date().toLocaleTimeString('ko-KR', { hour12: false });
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">${time}</span><span class="log-message ${type}">${message}</span>`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+            if (log.children.length > 100) log.removeChild(log.firstChild);
+        }
+
+        // Toast
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const msg = document.getElementById('toast-message');
+            msg.textContent = message;
+            toast.className = `toast show ${type}`;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // ===== 2D Map with Leaflet =====
+        const mapCanvas = document.getElementById('map-canvas');
+        const mapCtx = mapCanvas.getContext('2d');
+        let missionWaypoints = {};
+        let waypointSequence = [];
+        let boatPos = { x: 0, y: 0, heading: 0 };
+        let llmGoal = null;
+        let lidarPoints = [];
+        let clusterData = { mode: null, stable: [] };  // LiDAR 클러스터
+        let llmCommandHistory = [];
+
+        // Sydney Regatta 기준점 (GPS)
+        const REF_LAT = -33.722759;
+        const REF_LON = 150.674028;
+        const METERS_PER_DEG_LAT = 111320;
+        const METERS_PER_DEG_LON = 111320 * Math.cos(REF_LAT * Math.PI / 180);
+
+        // 로컬 좌표 → GPS
+        function localToGPS(x, y) {
+            const lat = REF_LAT + (y / METERS_PER_DEG_LAT);
+            const lon = REF_LON + (x / METERS_PER_DEG_LON);
+            return [lat, lon];
+        }
+
+        // GPS → 로컬 좌표
+        function gpsToLocal(lat, lon) {
+            const x = (lon - REF_LON) * METERS_PER_DEG_LON;
+            const y = (lat - REF_LAT) * METERS_PER_DEG_LAT;
+            return { x, y };
+        }
+
+        // Leaflet 맵 초기화
+        const leafletMap = L.map('leaflet-map', {
+            center: [REF_LAT, REF_LON],
+            zoom: 17,
+            zoomControl: false
+        });
+
+        // 타일 레이어들
+        const tileLayers = {
+            satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Esri'
+            }),
+            street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: 'OSM'
+            }),
+            dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19,
+                attribution: 'CartoDB'
+            })
+        };
+
+        let currentTileLayer = tileLayers.satellite;
+        currentTileLayer.addTo(leafletMap);
+
+        function setMapType(type) {
+            leafletMap.removeLayer(currentTileLayer);
+            currentTileLayer = tileLayers[type];
+            currentTileLayer.addTo(leafletMap);
+
+            document.querySelectorAll('.map-toggle button').forEach(b => b.classList.remove('active'));
+            document.getElementById('btn-' + type).classList.add('active');
+        }
+
+        // Leaflet 마커들
+        let boatMarker = null;
+        let llmGoalMarker = null;
+        let waypointMarkers = [];
+        let lidarLayer = null;
+        let llmPathLine = null;
+
+        // 맵 이벤트 - 줌/이동 시 canvas 다시 그리기
+        leafletMap.on('move zoom', () => drawMapOverlay());
+
+        // 마우스 상태 (canvas용 - 이제 Leaflet이 처리)
+        let isDragging = false;
+        let lastMouseX = 0, lastMouseY = 0;
+
+        function resizeMapCanvas() {
+            const container = mapCanvas.parentElement;
+            mapCanvas.width = container.clientWidth;
+            mapCanvas.height = container.clientHeight;
+        }
+
+        // Leaflet 좌표 → screen 좌표
+        function worldToScreen(x, y) {
+            const gps = localToGPS(x, y);
+            const point = leafletMap.latLngToContainerPoint(gps);
+            return { x: point.x, y: point.y };
+        }
+
+        // 보트 아이콘 (오각형 - 선수 방향 표시)
+        const boatIcon = L.divIcon({
+            className: 'boat-icon',
+            html: `<svg width="28" height="28" viewBox="0 0 28 28" style="filter: drop-shadow(0 0 6px #10b981);">
+                <polygon points="14,2 26,11 22,26 6,26 2,11"
+                    fill="#10b981" stroke="white" stroke-width="2"/>
+                <line x1="14" y1="6" x2="14" y2="14" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            </svg>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+        });
+
+        // LLM 목표 아이콘
+        const llmIcon = L.divIcon({
+            className: 'llm-icon',
+            html: '<div style="width:24px;height:24px;border:3px solid #ff00ff;border-radius:50%;box-shadow:0 0 15px #ff00ff;"></div>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+        });
+
+        // 보트 위치로 이동
+        function centerOnBoat() {
+            const gps = localToGPS(boatPos.x, boatPos.y);
+            leafletMap.setView(gps, leafletMap.getZoom());
+        }
+
+        // 더블클릭 - 보트 위치로 이동
+        leafletMap.on('dblclick', centerOnBoat);
+
+        async function loadWaypoints() {
+            try {
+                const res = await fetch(`${API_BASE}/waypoints`);
+                const data = await res.json();
+                missionWaypoints = data.waypoints;
+                waypointSequence = data.sequence;
+                addLog('웨이포인트 로드 완료', 'info');
+            } catch (e) {
+                missionWaypoints = {
+                    'start': {x: 0, y: 0, name: '시작점', color: '#00ff88'},
+                    'gate_start': {x: -4, y: 13, name: '게이트 시작', color: '#ff6b6b'},
+                    'gate_end': {x: -3, y: 95, name: '게이트 끝', color: '#ff6b6b'},
+                    'buoy_orbit': {x: 0, y: 123, name: '부표 선회', color: '#ffd93d'},
+                    'hopping': {x: 43, y: 112, name: '호핑 투어', color: '#6bcb77'},
+                    'dock_start': {x: 47, y: 22, name: '도킹 시작', color: '#4d96ff'},
+                };
+                waypointSequence = ['start', 'gate_start', 'gate_end', 'buoy_orbit', 'hopping', 'dock_start'];
+            }
+            initMapMarkers();
+        }
+
+        // Leaflet 마커 초기화
+        function initMapMarkers() {
+            // 웨이포인트 마커들
+            waypointMarkers.forEach(m => leafletMap.removeLayer(m));
+            waypointMarkers = [];
+
+            // 미션 경로선
+            const pathCoords = [];
+            for (const key of waypointSequence) {
+                const wp = missionWaypoints[key];
+                if (!wp) continue;
+                const gps = localToGPS(wp.x, wp.y);
+                pathCoords.push(gps);
+
+                // 웨이포인트 마커
+                const icon = L.divIcon({
+                    className: 'wp-icon',
+                    html: `<div style="
+                        width:16px;height:16px;
+                        background:${wp.color};
+                        border:2px solid white;
+                        border-radius:50%;
+                        box-shadow:0 0 8px ${wp.color};
+                    "></div>`,
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                });
+
+                const marker = L.marker(gps, { icon })
+                    .bindTooltip(`${wp.name}<br>(${wp.x}, ${wp.y})`, {
+                        permanent: false,
+                        direction: 'top',
+                        className: 'wp-tooltip'
+                    })
+                    .addTo(leafletMap);
+                waypointMarkers.push(marker);
+            }
+
+            // 미션 경로 폴리라인
+            if (pathCoords.length > 1) {
+                L.polyline(pathCoords, {
+                    color: 'rgba(100, 116, 139, 0.6)',
+                    weight: 2,
+                    dashArray: '8, 4'
+                }).addTo(leafletMap);
+            }
+
+            // 보트 마커
+            if (!boatMarker) {
+                boatMarker = L.marker([REF_LAT, REF_LON], { icon: boatIcon, zIndexOffset: 1000 })
+                    .addTo(leafletMap);
+            }
+        }
+
+        // 맵 오버레이 그리기 (canvas)
+        function drawMapOverlay() {
+            const w = mapCanvas.width, h = mapCanvas.height;
+            mapCtx.clearRect(0, 0, w, h);
+
+            // LiDAR 포인트 (canvas로 그리기 - 많은 점)
+            if (lidarPoints.length > 0) {
+                for (const pt of lidarPoints) {
+                    const p = worldToScreen(pt.x, pt.y);
+                    if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) continue;
+
+                    const intensity = Math.max(0, 1 - pt.dist / 20);
+                    const r = Math.round(255 * intensity);
+                    const g = Math.round(200 * (1 - intensity));
+                    const b = 100;
+
+                    mapCtx.beginPath();
+                    mapCtx.arc(p.x, p.y, 3 + intensity * 2, 0, Math.PI * 2);
+                    mapCtx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.8)`;
+                    mapCtx.fill();
+                }
+
+                // LiDAR 개수
+                mapCtx.fillStyle = 'rgba(6, 182, 212, 0.9)';
+                mapCtx.font = '11px JetBrains Mono';
+                mapCtx.fillText(`LiDAR: ${lidarPoints.length} pts`, 10, h - 10);
+            }
+
+            // 클러스터 표시 (안정화된 클러스터만)
+            if (clusterData.stable && clusterData.stable.length > 0) {
+                const headingRad = boatPos.heading * Math.PI / 180;
+                for (let i = 0; i < clusterData.stable.length; i++) {
+                    const c = clusterData.stable[i];
+                    // 클러스터 각도를 월드 좌표로 변환
+                    const clusterAngleRad = c.center_angle * Math.PI / 180;
+                    const worldAngle = clusterAngleRad + headingRad;
+                    const wx = boatPos.x + c.distance * Math.sin(worldAngle);
+                    const wy = boatPos.y + c.distance * Math.cos(worldAngle);
+                    const p = worldToScreen(wx, wy);
+                    if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) continue;
+
+                    // 클러스터 원 (크기는 point_count 반영)
+                    const radius = Math.min(20, 8 + (c.point_count || 10) / 10);
+                    mapCtx.beginPath();
+                    mapCtx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+                    mapCtx.fillStyle = clusterData.mode === '3d' ? 'rgba(0, 255, 100, 0.4)' : 'rgba(0, 255, 255, 0.4)';
+                    mapCtx.fill();
+                    mapCtx.strokeStyle = clusterData.mode === '3d' ? '#00ff64' : '#00ffff';
+                    mapCtx.lineWidth = 2;
+                    mapCtx.stroke();
+
+                    // 클러스터 정보 텍스트
+                    mapCtx.fillStyle = '#fff';
+                    mapCtx.font = 'bold 10px JetBrains Mono';
+                    mapCtx.textAlign = 'center';
+                    mapCtx.fillText(`${c.distance.toFixed(1)}m`, p.x, p.y - radius - 4);
+                    mapCtx.fillStyle = 'rgba(255,255,255,0.7)';
+                    mapCtx.font = '9px JetBrains Mono';
+                    mapCtx.fillText(`#${i}`, p.x, p.y + 3);
+                    mapCtx.textAlign = 'left';
+                }
+            }
+
+            // LLM 경로 (canvas로)
+            if (llmCommandHistory.length > 1) {
+                mapCtx.strokeStyle = 'rgba(255, 0, 255, 0.6)';
+                mapCtx.lineWidth = 2;
+                mapCtx.beginPath();
+                for (let i = 0; i < llmCommandHistory.length; i++) {
+                    const cmd = llmCommandHistory[i];
+                    if (cmd.x === undefined) continue;
+                    const p = worldToScreen(cmd.x, cmd.y);
+                    if (i === 0) mapCtx.moveTo(p.x, p.y);
+                    else mapCtx.lineTo(p.x, p.y);
+                }
+                mapCtx.stroke();
+
+                // 각 명령 점
+                for (let i = 0; i < llmCommandHistory.length; i++) {
+                    const cmd = llmCommandHistory[i];
+                    if (cmd.x === undefined) continue;
+                    const p = worldToScreen(cmd.x, cmd.y);
+                    const alpha = 0.3 + (i / llmCommandHistory.length) * 0.7;
+
+                    mapCtx.beginPath();
+                    mapCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                    mapCtx.fillStyle = `rgba(255, 0, 255, ${alpha})`;
+                    mapCtx.fill();
+                }
+            }
+
+            // 보트-목표 연결선
+            if (llmGoal) {
+                const bp = worldToScreen(boatPos.x, boatPos.y);
+                const gp = worldToScreen(llmGoal.x, llmGoal.y);
+
+                mapCtx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
+                mapCtx.lineWidth = 2;
+                mapCtx.setLineDash([6, 4]);
+                mapCtx.beginPath();
+                mapCtx.moveTo(bp.x, bp.y);
+                mapCtx.lineTo(gp.x, gp.y);
+                mapCtx.stroke();
+                mapCtx.setLineDash([]);
+
+                // 거리
+                const dist = Math.sqrt((llmGoal.x - boatPos.x)**2 + (llmGoal.y - boatPos.y)**2);
+                const midX = (bp.x + gp.x) / 2;
+                const midY = (bp.y + gp.y) / 2;
+                mapCtx.fillStyle = '#ff00ff';
+                mapCtx.font = 'bold 11px JetBrains Mono';
+                mapCtx.textAlign = 'center';
+                mapCtx.fillText(`${dist.toFixed(1)}m`, midX, midY - 5);
+            }
+        }
+
+        // 기존 drawMap 호환
+        function drawMap() {
+            updateMapMarkers();
+            drawMapOverlay();
+        }
+
+        // Leaflet 마커 업데이트
+        function updateMapMarkers() {
+            // 보트 마커 위치 업데이트
+            if (boatMarker) {
+                const gps = localToGPS(boatPos.x, boatPos.y);
+                boatMarker.setLatLng(gps);
+
+                // 보트 방향 표시 (회전)
+                const el = boatMarker.getElement();
+                if (el) {
+                    el.style.transform = el.style.transform.replace(/rotate\([^)]*\)/, '') +
+                        ` rotate(${boatPos.heading}deg)`;
+                }
+            }
+
+            // LLM 목표 마커
+            if (llmGoal) {
+                const gps = localToGPS(llmGoal.x, llmGoal.y);
+                if (!llmGoalMarker) {
+                    llmGoalMarker = L.marker(gps, { icon: llmIcon, zIndexOffset: 900 })
+                        .bindTooltip('LLM 목표', { permanent: true, direction: 'top' })
+                        .addTo(leafletMap);
+                } else {
+                    llmGoalMarker.setLatLng(gps);
+                }
+            } else if (llmGoalMarker) {
+                leafletMap.removeLayer(llmGoalMarker);
+                llmGoalMarker = null;
+            }
+        }
+
+
+        // LLM 액션 구독 (목표점 추적 + 히스토리)
+        function subscribeLLMAction() {
+            if (!ros?.isConnected) return;
+
+            new ROSLIB.Topic({ ros, name: '/llm_action', messageType: 'std_msgs/String' })
+                .subscribe(msg => {
+                    try {
+                        const action = JSON.parse(msg.data);
+                        const actionName = action.action || 'unknown';
+
+                        // 목표점이 있는 액션
+                        if (action.goal_x !== undefined && action.goal_y !== undefined) {
+                            llmGoal = { x: action.goal_x, y: action.goal_y };
+                            document.getElementById('llm-goal').textContent =
+                                `(${action.goal_x.toFixed(1)}, ${action.goal_y.toFixed(1)}) - ${actionName}`;
+
+                            // 히스토리에 추가
+                            llmCommandHistory.push({
+                                x: action.goal_x,
+                                y: action.goal_y,
+                                action: actionName,
+                                time: Date.now()
+                            });
+
+                            // 최대 50개 유지
+                            if (llmCommandHistory.length > 50) {
+                                llmCommandHistory.shift();
+                            }
+                        } else {
+                            // 목표점 없는 액션도 로그
+                            document.getElementById('llm-goal').textContent = actionName;
+                        }
+
+                        addLog(`LLM: ${actionName}` + (action.goal_x ? ` → (${action.goal_x.toFixed(1)}, ${action.goal_y.toFixed(1)})` : ''), 'llm');
+                        drawMap();
+                    } catch (e) {}
+                });
+        }
+
+        // 히스토리 초기화 버튼용
+        function clearLLMHistory() {
+            llmCommandHistory = [];
+            llmGoal = null;
+            document.getElementById('llm-goal').textContent = '--';
+            drawMap();
+            addLog('LLM 히스토리 초기화', 'info');
+        }
+
+        // 보트 위치 업데이트 (기존 boat_status 구독에 추가)
+        function updateBoatOnMap(data) {
+            const pos = data.position || {};
+            boatPos.x = pos.x || 0;
+            boatPos.y = pos.y || 0;
+            boatPos.heading = pos.heading_deg || 0;
+            drawMap();
+        }
+
+        // LiDAR 데이터를 맵 월드 좌표로 변환
+        function updateLidarOnMap(ranges) {
+            lidarPoints = [];
+            const headingRad = boatPos.heading * Math.PI / 180;
+
+            for (let i = 0; i < ranges.length; i++) {
+                const r = ranges[i];
+                if (r > 0.5 && r < 30) { // 유효 범위
+                    // LiDAR 각도 (보트 기준, 전방이 0)
+                    const lidarAngle = (i / ranges.length) * Math.PI * 2 - Math.PI;
+                    // 월드 좌표로 변환 (보트 헤딩 적용)
+                    const worldAngle = lidarAngle + headingRad;
+                    const wx = boatPos.x + r * Math.sin(worldAngle);
+                    const wy = boatPos.y + r * Math.cos(worldAngle);
+                    lidarPoints.push({ x: wx, y: wy, dist: r });
+                }
+            }
+        }
+
+        // 클러스터 정보 UI 업데이트
+        function updateClusterInfo() {
+            const modeEl = document.getElementById('cluster-mode');
+            const infoEl = document.getElementById('cluster-info');
+
+            if (!clusterData.mode) {
+                modeEl.textContent = '--';
+                modeEl.style.background = 'var(--bg-primary)';
+                infoEl.innerHTML = '<div style="color: var(--text-muted);">클러스터: cluster_visualizer 필요</div>';
+                return;
+            }
+
+            // 모드 표시
+            if (clusterData.mode === '3d') {
+                modeEl.textContent = '3D';
+                modeEl.style.background = 'var(--accent-green)';
+                modeEl.style.color = '#000';
+            } else {
+                modeEl.textContent = '2D';
+                modeEl.style.background = 'var(--accent-cyan)';
+                modeEl.style.color = '#000';
+            }
+
+            // 클러스터 목록
+            if (clusterData.stable.length === 0) {
+                infoEl.innerHTML = '<div style="color: var(--text-muted);">감지된 클러스터 없음</div>';
+                return;
+            }
+
+            let html = '';
+            for (let i = 0; i < clusterData.stable.length; i++) {
+                const c = clusterData.stable[i];
+                const distColor = c.distance < 5 ? 'var(--accent-red)' : c.distance < 10 ? 'var(--accent-yellow)' : 'var(--accent-green)';
+                html += `<div style="display:flex; justify-content:space-between; padding:2px 0; border-bottom:1px solid var(--border);">
+                    <span style="color:var(--accent-cyan);">#${i}</span>
+                    <span style="color:${distColor}; font-weight:600;">${c.distance.toFixed(1)}m</span>
+                    <span>${c.center_angle.toFixed(0)}°</span>
+                    <span style="color:var(--text-muted);">${c.point_count || '--'}pts</span>
+                </div>`;
+            }
+            infoEl.innerHTML = html;
+        }
+
+        // Init
+        resizeMapCanvas();
+        window.addEventListener('resize', () => {
+            resizeMapCanvas();
+            leafletMap.invalidateSize();
+            drawMapOverlay();
+        });
+        loadWaypoints();
+        initLaunchers();
+        connectROS();
+        checkBackendStatus();
+        setInterval(checkBackendStatus, 5000);
+        addLog('KABOAT Control Center 시작', 'info');
+    </script>
+</body>
+</html>

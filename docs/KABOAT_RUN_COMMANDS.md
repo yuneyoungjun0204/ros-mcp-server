@@ -81,3 +81,133 @@ ros2 run kaboat_autonomous integrated_visualizer
 
 - **Global Map (왼쪽)**: 보트 위치(빨간 점) · 궤적(파란 선) · 헤딩(초록 선) · 클릭하여 목적지 설정
 - **Polar Map (오른쪽)**: LiDAR(파란 점) · 안전 구역 · 전방(초록 선) · 명령 방향(빨간 선)
+
+---
+
+## 5. YOLO/HSV 객체 감지
+
+시뮬레이터(1번) 실행 후 객체 감지 노드 실행:
+
+**터미널 E** — 감지 노드 실행 (HSV 모드, 기본값):
+```zsh
+source /opt/ros/humble/setup.zsh
+source ~/vrx_ws/install/setup.zsh
+export PATH="/usr/bin:$PATH"
+cd ~/ros-mcp-server/kaboat_llm/perception
+python3 yolo_detector.py
+```
+
+**터미널 F** — 감지 결과 확인 (JSON):
+```zsh
+source /opt/ros/humble/setup.zsh
+ros2 topic echo /detected_objects
+```
+
+**터미널 G** — 시각화 이미지 확인 (rqt):
+```zsh
+source /opt/ros/humble/setup.zsh
+rqt_image_view /detection_image
+```
+
+### HSV 모드로 실행 (VRX 부표 최적화, 권장)
+
+```zsh
+source /opt/ros/humble/setup.zsh
+source ~/vrx_ws/install/setup.zsh
+export PATH="/usr/bin:$PATH"
+cd ~/ros-mcp-server/kaboat_llm/perception
+python3 yolo_detector.py
+```
+
+VRX 부표 색상 감지: `red`, `green`, `blue`, `yellow`, `black` (30ms 이하, 실시간)
+
+### ONNX 모드로 실행 (RoboBoat 대회 모델, 실험적)
+
+```zsh
+source /opt/ros/humble/setup.zsh
+source ~/vrx_ws/install/setup.zsh
+export PATH="/usr/bin:$PATH"
+cd ~/ros-mcp-server/kaboat_llm/perception
+python3 yolo_detector.py --ros-args \
+    -p use_yolo:=true \
+    -p yolo_model:=/home/yune/ros-mcp-server/kaboat_llm/perception/models/sign-simplified.onnx
+```
+
+> ⚠️ **참고**: `sign-simplified.onnx`는 OAK-D 전용 모델입니다. 25개 클래스(부표, 도킹 등)를 지원하지만 출력 형식이 특수하여 추가 개발이 필요합니다.
+
+### YOLOv8 모드로 실행 (범용 COCO 모델)
+
+```zsh
+source /opt/ros/humble/setup.zsh
+source ~/vrx_ws/install/setup.zsh
+export PATH="/usr/bin:$PATH"
+cd ~/ros-mcp-server/kaboat_llm/perception
+python3 yolo_detector.py --ros-args \
+    -p use_yolo:=true \
+    -p yolo_model:=/home/yune/ros-mcp-server/kaboat_llm/models/yolov8n.pt \
+    -p confidence_threshold:=0.5
+```
+
+### 파라미터 설명
+
+| 파라미터 | 기본값 | 설명 |
+|---------|-------|------|
+| `use_yolo` | `false` | YOLO 사용 여부 (false=HSV 색상 감지) |
+| `yolo_model` | `''` | YOLO 모델 파일 경로 (.pt) |
+| `confidence_threshold` | `0.5` | YOLO 감지 신뢰도 임계값 |
+| `camera_topic` | `/wamv/sensors/camera/image_raw` | 카메라 토픽 |
+| `enabled_colors` | `['red','green','blue','yellow','black']` | HSV 감지 색상 |
+| `min_area` | `500` | HSV 최소 감지 영역 (픽셀) |
+| `publish_rate` | `10.0` | 감지 발행 주기 (Hz) |
+
+### 발행 토픽
+
+| 토픽 | 타입 | 내용 |
+|-----|------|------|
+| `/detected_objects` | `std_msgs/String` | JSON 감지 결과 (label, bbox, confidence 등) |
+| `/detection_image` | `sensor_msgs/Image` | 박스가 그려진 시각화 이미지 |
+
+> ⚠️ **카메라 브리지 필요**: YOLO/HSV 감지가 작동하려면 `autonomous.launch.py`(3번)를 먼저 실행하여 카메라 브리지가 활성화되어야 합니다.
+
+---
+
+## 6. 3D LiDAR 클러스터링
+
+LiDAR 포인트클라우드에서 객체 클러스터를 감지하고 RViz에서 시각화:
+
+**터미널 H** — 클러스터 시각화 노드:
+```zsh
+source /opt/ros/humble/setup.zsh
+source ~/vrx_ws/install/setup.zsh
+export PATH="/usr/bin:$PATH"
+ros2 run kaboat_autonomous cluster_visualizer
+```
+
+**터미널 I** — 클러스터 결과 확인 (JSON):
+```zsh
+source /opt/ros/humble/setup.zsh
+ros2 topic echo /lidar_clusters
+```
+
+**RViz에서 시각화**:
+```zsh
+source /opt/ros/humble/setup.zsh
+rviz2
+```
+- Fixed Frame: `wamv/lidar_wamv_link` 또는 노드 시작 로그에 출력된 frame_id
+- Add → By topic → `/wamv/sensors/lidar/points` (PointCloud2)
+- Add → By topic → `/lidar_clusters_markers` (MarkerArray)
+
+### 발행 토픽
+
+| 토픽 | 타입 | 내용 |
+|-----|------|------|
+| `/lidar_clusters` | `std_msgs/String` | JSON (mode, raw clusters, stable clusters) |
+| `/lidar_clusters_markers` | `MarkerArray` | RViz 시각화 마커 |
+
+### 동작 모드
+
+| 모드 | 조건 | 마커 색상 |
+|-----|------|----------|
+| **3D 모드** | PointCloud2 수신 중 | 노란(raw) / 초록(안정화) |
+| **2D 폴백** | PointCloud2 없음 → LaserScan 사용 | 주황(raw) / 청록(안정화) |

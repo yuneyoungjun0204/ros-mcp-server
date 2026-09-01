@@ -1,0 +1,314 @@
+# Buoy Mission Scenarios (20개)
+# 게이트 통과, 부표 선회, 색상 인식 순서 보고
+
+metadata:
+  category: buoy_missions
+  count: 20
+  description: 부표 관련 미션 시나리오
+
+scenarios:
+  # === 부표 탐지 및 인식 (5개) ===
+  - id: buoy_001
+    name: 부표 탐색
+    context:
+      position: {x: 0, y: 0, heading: 0}
+      vision:
+        description: "부표가 보이지 않음"
+        detected_objects: []
+    user_command: "부표 찾아"
+    expected_output:
+      tool: kaboat_search_pattern
+      parameters:
+        target: buoy
+        pattern: expanding_square
+        range: 50
+
+  - id: buoy_002
+    name: 특정 색상 부표 찾기
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: green, distance: 30, bearing: -20}
+    user_command: "빨간 부표 찾아"
+    expected_output:
+      tool: kaboat_search_pattern
+      parameters:
+        target: {type: buoy, color: red}
+        pattern: sweep
+        range: 100
+
+  - id: buoy_003
+    name: 부표 색상 확인
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: unknown, distance: 15, bearing: 5}
+    user_command: "저 부표 색상이 뭐야?"
+    expected_output:
+      tool: kaboat_identify_object
+      parameters:
+        target: {bearing: 5, distance: 15}
+        property: color
+
+  - id: buoy_004
+    name: 주변 부표 목록
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: red, distance: 20, bearing: 10}
+          - {type: buoy, color: green, distance: 25, bearing: -15}
+          - {type: buoy, color: blue, distance: 30, bearing: 45}
+    user_command: "주변에 부표가 몇 개야?"
+    expected_output:
+      tool: kaboat_report_observation
+      parameters:
+        type: buoys
+        details:
+          count: 3
+          list:
+            - {color: red, distance: 20, bearing: 10}
+            - {color: green, distance: 25, bearing: -15}
+            - {color: blue, distance: 30, bearing: 45}
+
+  - id: buoy_005
+    name: 가장 가까운 부표
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: red, distance: 25}
+          - {type: buoy, color: green, distance: 15}
+          - {type: buoy, color: yellow, distance: 35}
+    user_command: "가장 가까운 부표로 가"
+    expected_output:
+      tool: kaboat_navigate_to
+      parameters:
+        target: {type: buoy, color: green}  # 가장 가까운 것
+        speed: normal
+
+  # === 부표 접근 및 선회 (7개) ===
+  - id: buoy_006
+    name: 부표 접근
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: red, distance: 30, bearing: 15}
+    user_command: "빨간 부표로 다가가"
+    expected_output:
+      tool: kaboat_approach_object
+      parameters:
+        target: {type: buoy, color: red}
+        stop_distance: 5
+
+  - id: buoy_007
+    name: 부표 시계방향 선회
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: green, distance: 10, bearing: 0}
+    user_command: "녹색 부표를 시계방향으로 돌아"
+    expected_output:
+      tool: kaboat_orbit_buoy
+      parameters:
+        target: {type: buoy, color: green}
+        direction: clockwise
+        radius: 8
+        loops: 1
+
+  - id: buoy_008
+    name: 부표 반시계방향 선회
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: blue, distance: 12, bearing: -5}
+    user_command: "파란 부표를 반시계방향으로 한 바퀴 돌아"
+    expected_output:
+      tool: kaboat_orbit_buoy
+      parameters:
+        target: {type: buoy, color: blue}
+        direction: counterclockwise
+        radius: 8
+        loops: 1
+
+  - id: buoy_009
+    name: 부표 선회 반경 지정
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: yellow, distance: 15}
+    user_command: "노란 부표 주위를 10미터 반경으로 돌아"
+    expected_output:
+      tool: kaboat_orbit_buoy
+      parameters:
+        target: {type: buoy, color: yellow}
+        radius: 10
+        direction: clockwise
+        loops: 1
+
+  - id: buoy_010
+    name: 여러 바퀴 선회
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: red, distance: 8}
+    user_command: "빨간 부표 주위를 두 바퀴 돌아"
+    expected_output:
+      tool: kaboat_orbit_buoy
+      parameters:
+        target: {type: buoy, color: red}
+        loops: 2
+        radius: 8
+        direction: clockwise
+
+  - id: buoy_011
+    name: 선회 후 이탈
+    context:
+      mission:
+        type: buoy_orbit
+        status: orbiting
+        loops_completed: 1
+    user_command: "선회 끝내고 다음으로 가"
+    expected_output:
+      tool: kaboat_exit_orbit
+      parameters:
+        next_action: continue_mission
+
+  - id: buoy_012
+    name: 부표 근처 호버링
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: green, distance: 6}
+    user_command: "녹색 부표 옆에서 대기해"
+    expected_output:
+      tool: kaboat_hold_position
+      parameters:
+        reference: {type: buoy, color: green}
+        offset: {distance: 5, bearing: 90}
+
+  # === 게이트 통과 (5개) ===
+  - id: buoy_013
+    name: 게이트 인식
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: red, distance: 20, bearing: 10}
+          - {type: buoy, color: green, distance: 20, bearing: -10}
+    user_command: "저게 게이트야?"
+    expected_output:
+      tool: kaboat_identify_gate
+      parameters:
+        left_buoy: {type: buoy, color: green}
+        right_buoy: {type: buoy, color: red}
+
+  - id: buoy_014
+    name: 게이트 정면 통과
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: red, distance: 15, bearing: 8}
+          - {type: buoy, color: green, distance: 15, bearing: -8}
+    user_command: "게이트 통과해"
+    expected_output:
+      tool: kaboat_navigate_between
+      parameters:
+        target_left: {type: buoy, color: green}
+        target_right: {type: buoy, color: red}
+        speed: normal
+        avoid_obstacles: true
+
+  - id: buoy_015
+    name: 비스듬한 게이트 접근
+    context:
+      position: {heading: 45}
+      vision:
+        detected_objects:
+          - {type: buoy, color: red, distance: 25, bearing: 30}
+          - {type: buoy, color: green, distance: 20, bearing: -10}
+    user_command: "게이트에 맞춰 접근해"
+    expected_output:
+      tool: kaboat_align_and_pass
+      parameters:
+        gate:
+          left: {type: buoy, color: green}
+          right: {type: buoy, color: red}
+        approach_distance: 10
+
+  - id: buoy_016
+    name: 연속 게이트 미션
+    context:
+      mission:
+        type: gate_navigation
+        total_gates: 8
+        completed: 0
+    user_command: "게이트 미션 시작"
+    expected_output:
+      tool: kaboat_execute_mission
+      parameters:
+        mission_type: aligned_navigation
+
+  - id: buoy_017
+    name: 게이트 미션 상태
+    context:
+      mission:
+        type: gate_navigation
+        total_gates: 8
+        completed: 5
+    user_command: "게이트 몇 개 통과했어?"
+    expected_output:
+      tool: kaboat_get_status
+      parameters:
+        info_type: mission_progress
+      reasoning: "8개 중 5개 통과 (62.5%)"
+
+  # === 이미지 센싱 미션 (3개) ===
+  - id: buoy_018
+    name: 부표 색상 순서 보고
+    context:
+      mission:
+        type: image_sensing
+      vision:
+        detected_objects:
+          - {type: buoy, color: red, distance: 10, bearing: -20}
+          - {type: buoy, color: green, distance: 12, bearing: 0}
+          - {type: buoy, color: blue, distance: 11, bearing: 20}
+    user_command: "부표 색상 순서가 어떻게 돼?"
+    expected_output:
+      tool: kaboat_report_observation
+      parameters:
+        type: buoy_sequence
+        details:
+          order: [red, green, blue]  # 좌→우 순서
+          confidence: 0.95
+
+  - id: buoy_019
+    name: 부표 패턴 인식
+    context:
+      vision:
+        detected_objects:
+          - {type: buoy, color: red, shape: circle}
+          - {type: buoy, color: red, shape: triangle}
+          - {type: buoy, color: green, shape: circle}
+    user_command: "부표 모양 알려줘"
+    expected_output:
+      tool: kaboat_report_observation
+      parameters:
+        type: buoy_pattern
+        details:
+          - {color: red, shape: circle}
+          - {color: red, shape: triangle}
+          - {color: green, shape: circle}
+
+  - id: buoy_020
+    name: 이미지 센싱 미션 완료
+    context:
+      mission:
+        type: image_sensing
+        buoys_identified: [red, green, blue]
+    user_command: "관측 결과 보고해"
+    expected_output:
+      tool: kaboat_submit_report
+      parameters:
+        mission_type: image_sensing
+        observation:
+          buoy_sequence: [red, green, blue]
+          timestamp: auto
