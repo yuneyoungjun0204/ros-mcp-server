@@ -122,6 +122,12 @@ LAUNCH_COMMANDS = {
         "cwd": "/home/yune/ros-mcp-server/kaboat_llm/scripts",
         "env_setup": ROS_ENV,
     },
+    "gemini_mcp": {
+        "name": "Gemini MCP",
+        "cmd": "python3 -c \"from kaboat_llm.gemini_mcp_bridge import GeminiMCPBridge; b=GeminiMCPBridge(); b.connect('127.0.0.1',9090); import time; time.sleep(999999)\"",
+        "cwd": "/home/yune/ros-mcp-server",
+        "env_setup": ROS_ENV,
+    },
 }
 
 # 풀 미션 순서
@@ -526,6 +532,110 @@ async def get_logs(name: str, lines: int = 50):
         except:
             return {"logs": [], "error": "read_error"}
     return {"logs": []}
+
+
+# ===== Gemini MCP Bridge API =====
+gemini_bridge = None
+gemini_history = []
+
+
+class GeminiChatRequest(BaseModel):
+    message: str
+    include_image: Optional[bool] = False
+
+
+@app.post("/api/gemini_mcp/chat")
+async def gemini_mcp_chat(request: GeminiChatRequest):
+    """Gemini MCP Bridge로 대화 - 사고 과정 및 이미지 포함"""
+    global gemini_bridge, gemini_history
+    import sys
+    import time
+    import base64
+
+    sys.path.insert(0, "/home/yune/ros-mcp-server")
+
+    try:
+        from kaboat_llm.gemini_mcp_bridge import GeminiMCPBridge
+
+        if gemini_bridge is None:
+            gemini_bridge = GeminiMCPBridge()
+            if not gemini_bridge.connect("127.0.0.1", 9090):
+                return {"error": "rosbridge 연결 실패"}
+
+        start_time = time.time()
+        function_calls = []
+        image_base64 = None
+
+        # 이미지 포함 요청 시 카메라 이미지 캡처
+        if request.include_image:
+            try:
+                gemini_bridge.rosbridge.send({
+                    "op": "subscribe",
+                    "topic": "/wamv/sensors/camera/image_raw/compressed",
+                    "type": "sensor_msgs/CompressedImage",
+                    "id": "camera_capture"
+                })
+                img_msg = gemini_bridge.rosbridge.receive(timeout=2.0)
+                if img_msg and "msg" in img_msg:
+                    image_base64 = img_msg["msg"].get("data", "")
+                # 구독 해제
+                gemini_bridge.rosbridge.send({
+                    "op": "unsubscribe",
+                    "topic": "/wamv/sensors/camera/image_raw/compressed",
+                    "id": "camera_capture"
+                })
+            except Exception as img_err:
+                print(f"[GeminiMCP] Image capture failed: {img_err}")
+
+        response = gemini_bridge.chat(
+            request.message,
+            callback=lambda name, args, result: function_calls.append({
+                "function": name,
+                "args": args,
+                "result": str(result)[:200]
+            })
+        )
+
+        latency_ms = int((time.time() - start_time) * 1000)
+
+        entry = {
+            "timestamp": time.strftime("%H:%M:%S"),
+            "message": request.message,
+            "function_calls": function_calls,
+            "response": response,
+            "latency_ms": latency_ms,
+            "image": image_base64
+        }
+        gemini_history.insert(0, entry)
+        gemini_history = gemini_history[:10]
+
+        return entry
+
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "trace": traceback.format_exc()}
+
+
+@app.get("/api/gemini_mcp/status")
+async def gemini_mcp_status():
+    """Gemini MCP Bridge 상태"""
+    global gemini_bridge
+    connected = gemini_bridge is not None and gemini_bridge.rosbridge.ws is not None
+    return {
+        "connected": connected,
+        "history_count": len(gemini_history),
+        "recent": gemini_history[:3] if gemini_history else []
+    }
+
+
+@app.post("/api/gemini_mcp/disconnect")
+async def gemini_mcp_disconnect():
+    """Gemini MCP Bridge 연결 해제"""
+    global gemini_bridge
+    if gemini_bridge:
+        gemini_bridge.disconnect()
+        gemini_bridge = None
+    return {"status": "disconnected"}
 
 
 # 정적 파일 서빙

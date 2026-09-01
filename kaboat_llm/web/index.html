@@ -981,6 +981,11 @@
                             <div style="font-weight: 600; margin-bottom: 4px;">HSV 감지 결과:</div>
                             <div id="hsv-detections"></div>
                         </div>
+                        <!-- 분석 이력 -->
+                        <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px;">
+                            <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 6px;">📜 분석 이력 (최근 5개)</div>
+                            <div id="vision-history" style="display: flex; gap: 6px; overflow-x: auto; padding: 2px 0;"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1015,6 +1020,56 @@
                     <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">LLM 판단 로그</div>
                     <div id="autonomous-log" style="background: var(--bg-tertiary); border-radius: 4px; padding: 8px; max-height: 120px; overflow-y: auto; font-family: monospace; font-size: 10px; line-height: 1.4;">
                         <div style="color: var(--text-muted);">대기 중...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gemini MCP Thinking Panel -->
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <span class="icon">[🧠]</span>
+                    <h2>GEMINI MCP</h2>
+                    <span id="gemini-mcp-status" style="margin-left: auto; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--text-muted); color: var(--bg-primary);">OFFLINE</span>
+                </div>
+                <div class="panel-body" style="padding: 12px;">
+                    <!-- 입력 영역 -->
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
+                        <input type="text" id="gemini-mcp-input" placeholder="Gemini에게 명령 (예: 보트 상태 확인해줘)" style="flex: 1; padding: 10px 12px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 13px;">
+                        <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap;">
+                            <input type="checkbox" id="gemini-mcp-include-image" style="width: 14px; height: 14px;">
+                            📷 이미지
+                        </label>
+                        <button class="btn btn-primary" onclick="sendGeminiMCPChat()" style="padding: 10px 16px;">전송</button>
+                    </div>
+
+                    <!-- 사고 과정 (Function Calls) -->
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px; display: flex; justify-content: space-between;">
+                            <span>🔧 FUNCTION CALLS (사고 과정)</span>
+                            <span id="gemini-mcp-latency" style="color: var(--accent-cyan);">--</span>
+                        </div>
+                        <div id="gemini-function-calls" style="background: var(--bg-tertiary); border-radius: 6px; padding: 8px; max-height: 150px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.5;">
+                            <div style="color: var(--text-muted);">대기 중...</div>
+                        </div>
+                    </div>
+
+                    <!-- 최종 응답 (이미지 + 텍스트 나란히) -->
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">💬 RESPONSE</div>
+                        <div style="display: flex; gap: 10px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; padding: 10px; min-height: 60px;">
+                            <img id="gemini-mcp-image" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" style="width: 100px; height: 75px; object-fit: cover; border-radius: 4px; display: none; flex-shrink: 0;">
+                            <div id="gemini-mcp-response" style="flex: 1; max-height: 120px; overflow-y: auto; font-size: 12px; line-height: 1.5; color: var(--accent-green);">
+                                응답 대기 중...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 분석 이력 (이미지 + 결과) -->
+                    <div>
+                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">📜 HISTORY (최근 5개)</div>
+                        <div id="gemini-mcp-history" style="display: flex; gap: 8px; overflow-x: auto; padding: 4px 0;">
+                            <div style="color: var(--text-muted); font-size: 11px;">이력 없음</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1153,6 +1208,7 @@
             { id: 'camera_bridge', name: '📷 CAMERA', icon: '' },
             { id: 'image_republish', name: '🔄 COMPRESS', icon: '' },
             { id: 'yolo_detector', name: 'YOLO DETECT', icon: '' },
+            { id: 'gemini_mcp', name: '🤖 GEMINI MCP', icon: '' },
         ];
 
         // Initialize launchers
@@ -1588,14 +1644,16 @@
             }
         }
 
+        let visionHistory = [];
+
         async function sendImageToGemini(customPrompt = null) {
             if (!currentImageData) {
                 showToast('카메라 이미지 없음', 'error');
                 return;
             }
 
-            // 전송된 이미지 표시
-            document.getElementById('gemini-image').src = currentImageData;
+            const sentImage = currentImageData;
+            document.getElementById('gemini-image').src = sentImage;
             document.getElementById('gemini-response').textContent = '분석 중...';
             document.getElementById('gemini-response').className = 'vision-response';
             document.getElementById('gemini-latency').textContent = '분석중...';
@@ -1608,7 +1666,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        image: currentImageData.split(',')[1],
+                        image: sentImage.split(',')[1],
                         prompt: prompt
                     })
                 });
@@ -1625,6 +1683,16 @@
                         data.latency_ms < 1000 ? 'var(--accent-green)' :
                         data.latency_ms < 2000 ? 'var(--accent-yellow)' : 'var(--accent-red)';
                     addLog(`Gemini: ${data.response.substring(0, 50)}...`, 'llm');
+
+                    // 이력 추가
+                    visionHistory.unshift({
+                        image: sentImage,
+                        response: data.response.substring(0, 60) + '...',
+                        timestamp: new Date().toLocaleTimeString(),
+                        latency: data.latency_ms
+                    });
+                    visionHistory = visionHistory.slice(0, 5);
+                    updateVisionHistory();
                 } else {
                     document.getElementById('gemini-response').textContent = '오류: ' + (data.error || '알 수 없음');
                     document.getElementById('gemini-latency').textContent = 'ERROR';
@@ -1636,6 +1704,32 @@
                 document.getElementById('gemini-latency').textContent = 'FAIL';
                 addLog('Gemini 요청 실패', 'error');
             }
+        }
+
+        function updateVisionHistory() {
+            const historyEl = document.getElementById('vision-history');
+            if (!historyEl || visionHistory.length === 0) {
+                if (historyEl) historyEl.innerHTML = '<div style="color: var(--text-muted); font-size: 10px;">이력 없음</div>';
+                return;
+            }
+
+            historyEl.innerHTML = visionHistory.map((h, i) => `
+                <div onclick="showVisionHistoryItem(${i})" style="flex: 0 0 80px; cursor: pointer; background: var(--bg-tertiary); border-radius: 4px; padding: 4px; text-align: center;">
+                    <img src="${h.image}" style="width: 70px; height: 50px; object-fit: cover; border-radius: 3px; border: 1px solid var(--border);">
+                    <div style="font-size: 9px; color: var(--text-muted); margin-top: 2px;">${h.timestamp}</div>
+                    <div style="font-size: 9px; color: var(--accent-cyan);">${h.latency}ms</div>
+                </div>
+            `).join('');
+        }
+
+        function showVisionHistoryItem(index) {
+            const item = visionHistory[index];
+            if (!item) return;
+            document.getElementById('gemini-image').src = item.image;
+            document.getElementById('gemini-response').textContent = item.response;
+            document.getElementById('gemini-timestamp').textContent = item.timestamp;
+            document.getElementById('gemini-latency').textContent = item.latency + 'ms';
+            showToast('이전 분석 결과 표시', 'info');
         }
 
         function toggleAutoAnalyze() {
@@ -1718,6 +1812,122 @@
                 addLog('HSV 요청 실패', 'error');
             }
         }
+
+        // ===== Gemini MCP Bridge =====
+        let geminiMCPHistory = [];
+
+        async function sendGeminiMCPChat() {
+            const input = document.getElementById('gemini-mcp-input');
+            const message = input.value.trim();
+            const includeImage = document.getElementById('gemini-mcp-include-image').checked;
+            if (!message) {
+                showToast('메시지를 입력하세요', 'error');
+                return;
+            }
+
+            // UI 업데이트
+            document.getElementById('gemini-function-calls').innerHTML = '<div style="color: var(--accent-yellow);">🔄 처리 중...</div>';
+            document.getElementById('gemini-mcp-response').textContent = '응답 대기 중...';
+            document.getElementById('gemini-mcp-response').style.color = 'var(--text-muted)';
+            document.getElementById('gemini-mcp-latency').textContent = '...';
+            document.getElementById('gemini-mcp-image').style.display = 'none';
+            addLog(`Gemini MCP: "${message}"${includeImage ? ' (이미지 포함)' : ''}`, 'llm');
+
+            try {
+                const res = await fetch(`${API_BASE}/gemini_mcp/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message, include_image: includeImage })
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    document.getElementById('gemini-function-calls').innerHTML = `<div style="color: var(--accent-red);">❌ ${data.error}</div>`;
+                    document.getElementById('gemini-mcp-response').textContent = '오류 발생';
+                    addLog(`Gemini MCP 오류: ${data.error}`, 'error');
+                    return;
+                }
+
+                // Function calls 표시
+                const fcEl = document.getElementById('gemini-function-calls');
+                if (data.function_calls && data.function_calls.length > 0) {
+                    fcEl.innerHTML = data.function_calls.map((fc, i) => `
+                        <div style="margin-bottom: 6px; padding: 4px 6px; background: var(--bg-primary); border-radius: 4px;">
+                            <span style="color: var(--accent-purple);">${i+1}. ${fc.function}</span>
+                            <span style="color: var(--text-muted);">(${JSON.stringify(fc.args).substring(0, 50)})</span>
+                            <div style="color: var(--accent-cyan); font-size: 10px; margin-top: 2px;">→ ${fc.result.substring(0, 100)}...</div>
+                        </div>
+                    `).join('');
+                } else {
+                    fcEl.innerHTML = '<div style="color: var(--text-muted);">함수 호출 없음 (직접 응답)</div>';
+                }
+
+                // 이미지 표시 (있는 경우)
+                const imgEl = document.getElementById('gemini-mcp-image');
+                if (data.image) {
+                    imgEl.src = 'data:image/jpeg;base64,' + data.image;
+                    imgEl.style.display = 'block';
+                } else {
+                    imgEl.style.display = 'none';
+                }
+
+                // 응답 표시
+                document.getElementById('gemini-mcp-response').textContent = data.response || '(응답 없음)';
+                document.getElementById('gemini-mcp-response').style.color = 'var(--accent-green)';
+                document.getElementById('gemini-mcp-latency').textContent = data.latency_ms + 'ms';
+                document.getElementById('gemini-mcp-status').textContent = 'CONNECTED';
+                document.getElementById('gemini-mcp-status').style.background = 'var(--accent-green)';
+
+                // 히스토리 추가 (이미지 포함)
+                geminiMCPHistory.unshift({
+                    timestamp: data.timestamp,
+                    message: message,
+                    response: data.response?.substring(0, 50) + '...',
+                    function_count: data.function_calls?.length || 0,
+                    image: data.image || null
+                });
+                geminiMCPHistory = geminiMCPHistory.slice(0, 5);
+                updateGeminiMCPHistory();
+
+                addLog(`Gemini 응답: ${data.response?.substring(0, 50)}...`, 'llm');
+                input.value = '';
+
+            } catch (e) {
+                document.getElementById('gemini-function-calls').innerHTML = `<div style="color: var(--accent-red);">❌ 연결 실패: ${e.message}</div>`;
+                document.getElementById('gemini-mcp-status').textContent = 'OFFLINE';
+                document.getElementById('gemini-mcp-status').style.background = 'var(--text-muted)';
+                addLog('Gemini MCP 연결 실패', 'error');
+            }
+        }
+
+        function updateGeminiMCPHistory() {
+            const historyEl = document.getElementById('gemini-mcp-history');
+            if (geminiMCPHistory.length === 0) {
+                historyEl.innerHTML = '<div style="color: var(--text-muted); font-size: 11px;">이력 없음</div>';
+                return;
+            }
+
+            historyEl.innerHTML = geminiMCPHistory.map((h, i) => `
+                <div style="flex: 0 0 ${h.image ? '180px' : '140px'}; background: var(--bg-tertiary); border-radius: 6px; padding: 8px; font-size: 10px;">
+                    ${h.image ? `<img src="data:image/jpeg;base64,${h.image}" style="width: 100%; height: 50px; object-fit: cover; border-radius: 4px; margin-bottom: 4px;">` : ''}
+                    <div style="color: var(--text-muted);">${h.timestamp}</div>
+                    <div style="color: var(--accent-purple); font-weight: 500; margin: 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${h.message}</div>
+                    <div style="color: var(--text-secondary);">${h.response}</div>
+                    <div style="color: var(--accent-cyan); margin-top: 4px;">🔧 ${h.function_count} calls${h.image ? ' 📷' : ''}</div>
+                </div>
+            `).join('');
+        }
+
+        // Enter 키로 전송
+        document.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('gemini-mcp-input');
+            if (input) {
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') sendGeminiMCPChat();
+                });
+            }
+        });
 
         // Actions
         const actionPub = () => new ROSLIB.Topic({ ros, name: '/llm_action', messageType: 'std_msgs/String' });
