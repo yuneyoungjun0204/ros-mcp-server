@@ -985,6 +985,40 @@
                 </div>
             </div>
 
+            <!-- 자율 모드 패널 -->
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <span class="icon">[🤖]</span>
+                    <h2>AUTONOMOUS MODE</h2>
+                    <span id="autonomous-status" style="margin-left: auto; font-size: 11px; padding: 2px 8px; border-radius: 4px; background: var(--text-muted); color: var(--bg-primary);">OFF</span>
+                </div>
+                <div class="panel-body" style="padding: 12px;">
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <button id="btn-auto-start" class="btn btn-primary" style="flex: 1;" onclick="startAutonomous()">
+                            ▶️ 자율 시작
+                        </button>
+                        <button id="btn-auto-stop" class="btn" style="flex: 1; background: #ef4444;" onclick="stopAutonomous()">
+                            ⏹️ 중지
+                        </button>
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <div style="font-size: 10px; color: var(--text-muted);">현재 미션</div>
+                        <div id="current-mission" style="font-size: 14px; font-weight: 600; color: var(--accent-green);">--</div>
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <div style="font-size: 10px; color: var(--text-muted);">진행률</div>
+                        <div style="background: var(--bg-tertiary); border-radius: 4px; height: 8px; overflow: hidden;">
+                            <div id="mission-progress" style="background: var(--accent-green); height: 100%; width: 0%; transition: width 0.3s;"></div>
+                        </div>
+                        <div id="mission-progress-text" style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">0 / 4</div>
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">LLM 판단 로그</div>
+                    <div id="autonomous-log" style="background: var(--bg-tertiary); border-radius: 4px; padding: 8px; max-height: 120px; overflow-y: auto; font-family: monospace; font-size: 10px; line-height: 1.4;">
+                        <div style="color: var(--text-muted);">대기 중...</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 2D Map -->
             <div class="panel" style="margin-top: 16px;">
                 <div class="panel-header">
@@ -1289,10 +1323,11 @@
                         closestEl.textContent = closest + 'm';
                         closestEl.className = 'status-value' + (obs.closest < 3 ? ' danger' : obs.closest < 8 ? ' warning' : '');
 
-                        // Compass
-                        const heading = pos.heading_deg ?? 0;
-                        document.getElementById('heading-value').textContent = heading.toFixed(0);
-                        document.getElementById('compass-needle').style.transform = `rotate(${heading}deg)`;
+                        // Compass (ENU → Compass 변환: 0°=East → 0°=North)
+                        const headingENU = pos.heading_deg ?? 0;
+                        const headingCompass = (90 - headingENU + 360) % 360;
+                        document.getElementById('heading-value').textContent = headingCompass.toFixed(0);
+                        document.getElementById('compass-needle').style.transform = `rotate(${headingCompass}deg)`;
 
                         // Control status (psi_error, thrust, goal heading, wp distance)
                         const cmd = data.command || {};
@@ -1446,6 +1481,111 @@
             });
 
             addLog('카메라 구독 시작', 'info');
+
+            // 자율 모드 로그 구독
+            const autoLogTopic = new ROSLIB.Topic({
+                ros,
+                name: '/autonomous_log',
+                messageType: 'std_msgs/String'
+            });
+            autoLogTopic.subscribe(msg => {
+                try {
+                    const log = JSON.parse(msg.data);
+                    appendAutonomousLog(log.message, log.level);
+                } catch (e) {}
+            });
+
+            // 미션 상태 구독
+            const missionStatusTopic = new ROSLIB.Topic({
+                ros,
+                name: '/mission_status',
+                messageType: 'std_msgs/String'
+            });
+            missionStatusTopic.subscribe(msg => {
+                try {
+                    const status = JSON.parse(msg.data);
+                    updateAutonomousUI(status);
+                } catch (e) {}
+            });
+        }
+
+        // ===== 자율 모드 함수 =====
+        async function startAutonomous() {
+            try {
+                const res = await fetch(`${API_BASE}/autonomous/start`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'started') {
+                    showToast('자율 모드 시작', 'success');
+                    document.getElementById('autonomous-status').textContent = 'RUNNING';
+                    document.getElementById('autonomous-status').style.background = 'var(--accent-green)';
+                    addLog('자율 모드 시작', 'llm');
+                }
+            } catch (e) {
+                showToast('자율 모드 시작 실패', 'error');
+            }
+        }
+
+        async function stopAutonomous() {
+            try {
+                const res = await fetch(`${API_BASE}/autonomous/stop`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'stopped') {
+                    showToast('자율 모드 중지', 'info');
+                    document.getElementById('autonomous-status').textContent = 'OFF';
+                    document.getElementById('autonomous-status').style.background = 'var(--text-muted)';
+                    addLog('자율 모드 중지', 'warning');
+                }
+            } catch (e) {
+                showToast('자율 모드 중지 실패', 'error');
+            }
+        }
+
+        function updateAutonomousUI(status) {
+            // 상태 표시
+            const statusEl = document.getElementById('autonomous-status');
+            if (status.autonomous_mode) {
+                statusEl.textContent = 'RUNNING';
+                statusEl.style.background = 'var(--accent-green)';
+            } else {
+                statusEl.textContent = status.mission_status === 'completed' ? 'DONE' : 'OFF';
+                statusEl.style.background = status.mission_status === 'completed' ? 'var(--accent-cyan)' : 'var(--text-muted)';
+            }
+
+            // 현재 미션
+            const missionNames = {
+                'gate_search': '🚪 게이트 통과',
+                'buoy_orbit': '🔴 부표 선회',
+                'hopping_tour': '📍 호핑 투어',
+                'docking': '⚓ 도킹',
+                'completed': '✅ 완료'
+            };
+            document.getElementById('current-mission').textContent = missionNames[status.current_mission] || status.current_mission;
+
+            // 진행률
+            const progress = (status.mission_index / status.total_missions) * 100;
+            document.getElementById('mission-progress').style.width = progress + '%';
+            document.getElementById('mission-progress-text').textContent = `${status.mission_index} / ${status.total_missions}`;
+        }
+
+        function appendAutonomousLog(message, level) {
+            const logEl = document.getElementById('autonomous-log');
+            const colors = {
+                'system': 'var(--accent-cyan)',
+                'gemini': 'var(--accent-green)',
+                'decision': '#fbbf24',
+                'action': '#a78bfa',
+                'command': '#f472b6',
+                'error': '#ef4444',
+                'info': 'var(--text-muted)'
+            };
+            const color = colors[level] || 'var(--text-muted)';
+            const time = new Date().toLocaleTimeString();
+            logEl.innerHTML = `<div style="color: ${color};">[${time}] ${message}</div>` + logEl.innerHTML;
+
+            // 최대 20개 유지
+            while (logEl.children.length > 20) {
+                logEl.removeChild(logEl.lastChild);
+            }
         }
 
         async function sendImageToGemini(customPrompt = null) {
@@ -1888,12 +2028,13 @@
 
             // 클러스터 표시 (안정화된 클러스터만)
             if (clusterData.stable && clusterData.stable.length > 0) {
-                const headingRad = boatPos.heading * Math.PI / 180;
+                // ENU heading을 navigation 좌표로 변환 (0°=East → 0°=North)
+                const navHeadingRad = (90 - boatPos.heading) * Math.PI / 180;
                 for (let i = 0; i < clusterData.stable.length; i++) {
                     const c = clusterData.stable[i];
                     // 클러스터 각도를 월드 좌표로 변환
                     const clusterAngleRad = c.center_angle * Math.PI / 180;
-                    const worldAngle = clusterAngleRad + headingRad;
+                    const worldAngle = clusterAngleRad + navHeadingRad;
                     const wx = boatPos.x + c.distance * Math.sin(worldAngle);
                     const wy = boatPos.y + c.distance * Math.cos(worldAngle);
                     const p = worldToScreen(wx, wy);
@@ -1987,11 +2128,12 @@
                 const gps = localToGPS(boatPos.x, boatPos.y);
                 boatMarker.setLatLng(gps);
 
-                // 보트 방향 표시 (회전)
+                // 보트 방향 표시 (ENU → Compass 변환 후 회전)
                 const el = boatMarker.getElement();
                 if (el) {
+                    const compassHeading = (90 - boatPos.heading + 360) % 360;
                     el.style.transform = el.style.transform.replace(/rotate\([^)]*\)/, '') +
-                        ` rotate(${boatPos.heading}deg)`;
+                        ` rotate(${compassHeading}deg)`;
                 }
             }
 
@@ -2072,15 +2214,16 @@
         // LiDAR 데이터를 맵 월드 좌표로 변환
         function updateLidarOnMap(ranges) {
             lidarPoints = [];
-            const headingRad = boatPos.heading * Math.PI / 180;
+            // ENU heading을 navigation 좌표로 변환 (0°=East → 0°=North)
+            const navHeadingRad = (90 - boatPos.heading) * Math.PI / 180;
 
             for (let i = 0; i < ranges.length; i++) {
                 const r = ranges[i];
                 if (r > 0.5 && r < 30) { // 유효 범위
                     // LiDAR 각도 (보트 기준, 전방이 0)
                     const lidarAngle = (i / ranges.length) * Math.PI * 2 - Math.PI;
-                    // 월드 좌표로 변환 (보트 헤딩 적용)
-                    const worldAngle = lidarAngle + headingRad;
+                    // 월드 좌표로 변환 (navigation 헤딩 적용)
+                    const worldAngle = lidarAngle + navHeadingRad;
                     const wx = boatPos.x + r * Math.sin(worldAngle);
                     const wy = boatPos.y + r * Math.cos(worldAngle);
                     lidarPoints.push({ x: wx, y: wy, dist: r });

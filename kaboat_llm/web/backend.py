@@ -265,6 +265,81 @@ async def detect_buoys(request: BuoyDetectionRequest):
         return {"error": str(e), "trace": traceback.format_exc()}
 
 
+@app.post("/api/autonomous/start")
+async def autonomous_start():
+    """자율 모드 시작 - ROS 토픽으로 발행"""
+    try:
+        clean_env = os.environ.copy()
+        clean_env["PATH"] = CLEAN_PATH
+
+        result = subprocess.run(
+            ["/bin/bash", "-c",
+             f"{ROS_ENV} && "
+             "ros2 topic pub --once /autonomous_control std_msgs/String "
+             "'{\"data\": \"{\\\"action\\\": \\\"start\\\"}\"}'"
+            ],
+            env=clean_env,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        return {"status": "started", "output": result.stdout or result.stderr}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/api/autonomous/stop")
+async def autonomous_stop():
+    """자율 모드 중지"""
+    try:
+        clean_env = os.environ.copy()
+        clean_env["PATH"] = CLEAN_PATH
+
+        result = subprocess.run(
+            ["/bin/bash", "-c",
+             f"{ROS_ENV} && "
+             "ros2 topic pub --once /autonomous_control std_msgs/String "
+             "'{\"data\": \"{\\\"action\\\": \\\"stop\\\"}\"}'"
+            ],
+            env=clean_env,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        return {"status": "stopped", "output": result.stdout or result.stderr}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.get("/api/autonomous/status")
+async def autonomous_status():
+    """자율 모드 상태 조회 - /mission_status 토픽에서 가져옴"""
+    try:
+        clean_env = os.environ.copy()
+        clean_env["PATH"] = CLEAN_PATH
+
+        result = subprocess.run(
+            ["/bin/bash", "-c",
+             f"{ROS_ENV} && "
+             "timeout 2 ros2 topic echo /mission_status --once 2>/dev/null || echo '{}'"
+            ],
+            env=clean_env,
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        # YAML 형식 파싱 시도
+        output = result.stdout.strip()
+        if 'data:' in output:
+            import re
+            match = re.search(r"data:\s*'(.+)'", output, re.DOTALL)
+            if match:
+                return {"status": "ok", "data": json.loads(match.group(1).replace("\\", ""))}
+        return {"status": "ok", "data": {"autonomous_mode": False, "mission_status": "unknown"}}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @app.post("/api/release_boat")
 async def release_boat():
     """WAM-V를 플랫폼에서 해제 (시작 시 고정 문제 해결)"""
