@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ros-mcp": {
+      "command": "/home/yune/ros-mcp-server/.venv/bin/ros-mcp",
+      "args": [],
+      "env": {
+        "ROS_DOMAIN_ID": "0"
+      }
+    }
+  }
+}

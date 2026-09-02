@@ -820,60 +820,27 @@
 
             <div class="panel" style="margin-top: 16px;">
                 <div class="panel-header">
-                    <span class="icon">[SPD]</span>
-                    <h2>SPEED CONTROL</h2>
-                </div>
-                <div class="panel-body">
-                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                        <span style="color: var(--text-muted); font-size: 0.8rem; min-width: 40px;">0.25x</span>
-                        <input type="range" id="speed-slider" min="0.25" max="5" step="0.25" value="1"
-                            style="flex: 1; accent-color: var(--cyan);" onchange="updateSpeed(this.value)">
-                        <span style="color: var(--text-muted); font-size: 0.8rem; min-width: 30px;">5x</span>
-                    </div>
-                    <div style="text-align: center;">
-                        <span style="font-size: 1.5rem; font-weight: 700; color: var(--cyan);" id="speed-value">1.0x</span>
-                        <div style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px;">추력 배율</div>
-                    </div>
-                    <div class="btn-group" style="margin-top: 12px;">
-                        <button class="btn btn-secondary" onclick="setSpeedPreset(0.5)">0.5x</button>
-                        <button class="btn btn-primary" onclick="setSpeedPreset(1.0)">1x</button>
-                        <button class="btn btn-secondary" onclick="setSpeedPreset(2.0)">2x</button>
-                        <button class="btn btn-warning" onclick="setSpeedPreset(5.0)">MAX</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="panel" style="margin-top: 16px;">
-                <div class="panel-header">
                     <span class="icon">[SET]</span>
-                    <h2>MISSION SETTINGS</h2>
+                    <h2>SETTINGS</h2>
                 </div>
                 <div class="panel-body">
-                    <!-- GOAL_RANGE 슬라이더 -->
-                    <div style="margin-bottom: 16px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="color: var(--text-muted); font-size: 0.75rem;">도착 판정 거리</span>
-                            <span style="color: var(--cyan); font-weight: 700;" id="goal-range-value">5m</span>
+                    <!-- 속도 배율 -->
+                    <div style="margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted); font-size: 0.75rem;">속도</span>
+                            <span style="font-size: 1.2rem; font-weight: 700; color: var(--accent-cyan);" id="speed-value">1.0x</span>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="color: var(--text-muted); font-size: 0.7rem;">1m</span>
-                            <input type="range" id="goal-range-slider" min="1" max="25" step="1" value="5"
-                                style="flex: 1; accent-color: var(--green);" onchange="updateGoalRange(this.value)">
-                            <span style="color: var(--text-muted); font-size: 0.7rem;">25m</span>
-                        </div>
+                        <input type="range" id="speed-slider" min="0.5" max="5" step="0.5" value="1"
+                            style="width: 100%; accent-color: var(--accent-cyan);" onchange="updateSpeed(this.value)">
                     </div>
-                    <!-- SPEED_MULTIPLIER 슬라이더 -->
+                    <!-- 도착 판정 거리 -->
                     <div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="color: var(--text-muted); font-size: 0.75rem;">이동 속도</span>
-                            <span style="color: var(--yellow); font-weight: 700;" id="move-speed-value">5</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted); font-size: 0.75rem;">도착거리</span>
+                            <span style="font-weight: 700; color: var(--accent-green);" id="goal-range-value">15m</span>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="color: var(--text-muted); font-size: 0.7rem;">1</span>
-                            <input type="range" id="move-speed-slider" min="1" max="10" step="0.5" value="5"
-                                style="flex: 1; accent-color: var(--yellow);" onchange="updateMoveSpeed(this.value)">
-                            <span style="color: var(--text-muted); font-size: 0.7rem;">10</span>
-                        </div>
+                        <input type="range" id="goal-range-slider" min="5" max="50" step="5" value="15"
+                            style="width: 100%; accent-color: var(--accent-green);" onchange="updateGoalRange(this.value)">
                     </div>
                 </div>
             </div>
@@ -1185,69 +1152,62 @@
 
         <!-- Right Sidebar - Controls -->
         <aside class="sidebar-right">
+            <!-- LLM 액션 히스토리 (새로 추가) -->
             <div class="panel">
                 <div class="panel-header">
-                    <span class="icon">[CTL]</span>
-                    <h2>MANUAL CONTROL</h2>
+                    <span class="icon">[LLM]</span>
+                    <h2>LLM ACTIONS</h2>
                 </div>
                 <div class="panel-body">
-                    <div class="control-pad">
-                        <div></div>
-                        <button class="btn btn-primary" onclick="sendAction({action:'move_forward',duration:2})">↑</button>
-                        <div></div>
-                        <button class="btn btn-primary" onclick="sendAction({action:'turn_left',angle:30})">←</button>
-                        <button class="btn center" onclick="sendAction({action:'stop'})">■</button>
-                        <button class="btn btn-primary" onclick="sendAction({action:'turn_right',angle:30})">→</button>
-                        <div></div>
-                        <button class="btn btn-primary" onclick="sendAction({action:'backward',duration:2})">↓</button>
-                        <div></div>
+                    <div id="llm-action-display" style="background: var(--bg-primary); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">현재 액션</div>
+                        <div id="llm-current-action" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-cyan);">--</div>
+                        <div id="llm-action-reason" style="font-size: 11px; color: var(--accent-yellow); margin-top: 4px; max-height: 40px; overflow-y: auto;">--</div>
                     </div>
-
-                    <div class="action-grid">
-                        <button class="btn btn-secondary" onclick="sendAction({action:'dorodori',duration:8})">🔍 탐색</button>
-                        <button class="btn btn-secondary" onclick="sendAction({action:'hold',duration:5})">⏸ 대기</button>
-                        <button class="btn btn-secondary" onclick="sendAction({action:'turn_left',angle:90})">↩ 90° 좌</button>
-                        <button class="btn btn-secondary" onclick="sendAction({action:'turn_right',angle:90})">↪ 90° 우</button>
+                    <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">히스토리 (최근 5개)</div>
+                    <div id="llm-action-history" style="max-height: 120px; overflow-y: auto; font-size: 11px;">
+                        <div style="color: var(--text-muted);">대기 중...</div>
                     </div>
                 </div>
             </div>
 
+            <!-- 간소화된 매뉴얼 컨트롤 -->
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <span class="icon">[CTL]</span>
+                    <h2>CONTROL</h2>
+                </div>
+                <div class="panel-body">
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px;">
+                        <div></div>
+                        <button class="btn btn-primary" onclick="sendAction({action:'move_forward',duration:2})" style="padding: 12px;">↑</button>
+                        <div></div>
+                        <button class="btn btn-primary" onclick="sendAction({action:'turn_left',angle:30})" style="padding: 12px;">←</button>
+                        <button class="btn btn-danger" onclick="emergencyStop()" style="padding: 12px;">■</button>
+                        <button class="btn btn-primary" onclick="sendAction({action:'turn_right',angle:30})" style="padding: 12px;">→</button>
+                        <div></div>
+                        <button class="btn btn-primary" onclick="sendAction({action:'backward',duration:2})" style="padding: 12px;">↓</button>
+                        <div></div>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="btn btn-secondary" style="flex:1; font-size:10px;" onclick="sendAction({action:'dorodori',duration:12})">🔍 탐색</button>
+                        <button class="btn btn-secondary" style="flex:1; font-size:10px;" onclick="releaseBoat()">🔓 해제</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 웨이포인트 네비게이션 -->
             <div class="panel" style="margin-top: 16px;">
                 <div class="panel-header">
                     <span class="icon">[NAV]</span>
-                    <h2>WAYPOINT NAV</h2>
+                    <h2>NAVIGATE</h2>
                 </div>
                 <div class="panel-body">
-                    <div class="input-row">
-                        <input type="number" id="wp-x" placeholder="X 좌표">
-                        <input type="number" id="wp-y" placeholder="Y 좌표">
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <input type="number" id="wp-x" placeholder="X" style="flex:1; padding: 8px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);">
+                        <input type="number" id="wp-y" placeholder="Y" style="flex:1; padding: 8px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);">
                     </div>
-                    <button class="btn btn-primary" style="width:100%;" onclick="navigateTo()">
-                        GO
-                    </button>
-                </div>
-            </div>
-
-            <div class="panel" style="margin-top: 16px;">
-                <div class="panel-header">
-                    <span class="icon">[!]</span>
-                    <h2>EMERGENCY</h2>
-                </div>
-                <div class="panel-body">
-                    <button class="btn btn-danger" style="width:100%; padding:20px; font-size:1.1rem; margin-bottom:10px;" onclick="emergencyStop()">
-                        EMERGENCY STOP
-                    </button>
-                    <div style="display:flex; gap:8px;">
-                        <button class="btn btn-secondary" style="flex:1;" onclick="releaseBoat()">
-                            RELEASE
-                        </button>
-                        <button class="btn btn-secondary" style="flex:1;" onclick="unpauseSim()">
-                            UNPAUSE
-                        </button>
-                    </div>
-                    <div style="font-size:10px; color:var(--text-muted); margin-top:8px;">
-                        시작 후 보트가 안 움직이면 "보트 해제" 클릭
-                    </div>
+                    <button class="btn btn-primary" style="width:100%;" onclick="navigateTo()">GO</button>
                 </div>
             </div>
         </aside>
@@ -1263,16 +1223,11 @@
         let ros = null;
 
         const LAUNCHERS = [
-            { id: 'simulator', name: 'SIMULATOR', icon: '' },
-            { id: 'rosbridge', name: 'ROS BRIDGE', icon: '' },
-            { id: 'autonomous_viz', name: 'AUTONOMOUS', icon: '' },
-            { id: 'action_dispatcher', name: 'DISPATCHER', icon: '' },
-            { id: 'llm_interface', name: 'LLM IFACE', icon: '' },
-            { id: 'cluster_visualizer', name: 'CLUSTER VIZ', icon: '' },
-            { id: 'camera_bridge', name: '📷 CAMERA', icon: '' },
-            { id: 'image_republish', name: '🔄 COMPRESS', icon: '' },
-            { id: 'yolo_detector', name: 'YOLO DETECT', icon: '' },
-            { id: 'gemini_mcp', name: '🤖 GEMINI MCP', icon: '' },
+            { id: 'simulator', name: 'SIMULATOR', icon: '🎮' },
+            { id: 'rosbridge', name: 'ROS BRIDGE', icon: '🔗' },
+            { id: 'action_dispatcher', name: 'DISPATCHER', icon: '⚙️' },
+            { id: 'camera_bridge', name: 'CAMERA', icon: '📷' },
+            { id: 'gemini_mcp', name: 'GEMINI MCP', icon: '🤖' },
         ];
 
         // Initialize launchers
@@ -2436,28 +2391,59 @@
                 }
             }
 
-            // 보트-목표 연결선
+            // 보트-목표 연결선 + LLM 액션 표시
             if (llmGoal) {
                 const bp = worldToScreen(boatPos.x, boatPos.y);
                 const gp = worldToScreen(llmGoal.x, llmGoal.y);
 
-                mapCtx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
-                mapCtx.lineWidth = 2;
-                mapCtx.setLineDash([6, 4]);
+                // 연결선
+                mapCtx.strokeStyle = 'rgba(255, 0, 255, 0.7)';
+                mapCtx.lineWidth = 3;
+                mapCtx.setLineDash([8, 4]);
                 mapCtx.beginPath();
                 mapCtx.moveTo(bp.x, bp.y);
                 mapCtx.lineTo(gp.x, gp.y);
                 mapCtx.stroke();
                 mapCtx.setLineDash([]);
 
-                // 거리
+                // 목표점 마커 (더 크게)
+                mapCtx.beginPath();
+                mapCtx.arc(gp.x, gp.y, 12, 0, Math.PI * 2);
+                mapCtx.fillStyle = 'rgba(255, 0, 255, 0.3)';
+                mapCtx.fill();
+                mapCtx.strokeStyle = '#ff00ff';
+                mapCtx.lineWidth = 3;
+                mapCtx.stroke();
+
+                // 거리 + 액션명
                 const dist = Math.sqrt((llmGoal.x - boatPos.x)**2 + (llmGoal.y - boatPos.y)**2);
-                const midX = (bp.x + gp.x) / 2;
-                const midY = (bp.y + gp.y) / 2;
+                const actionName = llmGoal.action || '';
+
+                // 액션 정보 박스 (목표점 위)
+                mapCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                const boxWidth = Math.max(80, actionName.length * 8 + 20);
+                mapCtx.fillRect(gp.x - boxWidth/2, gp.y - 45, boxWidth, 32);
+
                 mapCtx.fillStyle = '#ff00ff';
-                mapCtx.font = 'bold 11px JetBrains Mono';
+                mapCtx.font = 'bold 12px JetBrains Mono';
                 mapCtx.textAlign = 'center';
-                mapCtx.fillText(`${dist.toFixed(1)}m`, midX, midY - 5);
+                mapCtx.fillText(actionName, gp.x, gp.y - 30);
+
+                mapCtx.fillStyle = '#00ff64';
+                mapCtx.font = '11px JetBrains Mono';
+                mapCtx.fillText(`${dist.toFixed(1)}m`, gp.x, gp.y - 18);
+
+                // 이유 표시 (있는 경우)
+                if (llmGoal.reason) {
+                    const reasonShort = llmGoal.reason.substring(0, 30) + (llmGoal.reason.length > 30 ? '...' : '');
+                    mapCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    mapCtx.fillRect(gp.x - 80, gp.y + 15, 160, 18);
+                    mapCtx.fillStyle = '#ffd700';
+                    mapCtx.font = '10px sans-serif';
+                    mapCtx.fillText(reasonShort, gp.x, gp.y + 28);
+                }
+
+                mapCtx.textAlign = 'left';
             }
         }
 
@@ -2500,6 +2486,9 @@
         }
 
 
+        // LLM 액션 히스토리 (UI 표시용)
+        let llmActionHistory = [];
+
         // LLM 액션 구독 (목표점 추적 + 히스토리)
         function subscribeLLMAction() {
             if (!ros?.isConnected) return;
@@ -2509,34 +2498,62 @@
                     try {
                         const action = JSON.parse(msg.data);
                         const actionName = action.action || 'unknown';
+                        const reason = action.reason || '';
+                        const now = new Date();
+                        const timeStr = now.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+
+                        // 현재 액션 표시 (LLM ACTIONS 패널)
+                        document.getElementById('llm-current-action').textContent = actionName;
+                        document.getElementById('llm-action-reason').textContent = reason || '(이유 없음)';
+
+                        // 히스토리에 추가
+                        llmActionHistory.unshift({
+                            action: actionName,
+                            reason: reason,
+                            goal: action.goal_x !== undefined ? `(${action.goal_x.toFixed(1)}, ${action.goal_y.toFixed(1)})` : null,
+                            time: timeStr
+                        });
+                        if (llmActionHistory.length > 5) llmActionHistory.pop();
+                        updateLLMActionHistoryUI();
 
                         // 목표점이 있는 액션
                         if (action.goal_x !== undefined && action.goal_y !== undefined) {
-                            llmGoal = { x: action.goal_x, y: action.goal_y };
+                            llmGoal = { x: action.goal_x, y: action.goal_y, action: actionName, reason: reason };
                             document.getElementById('llm-goal').textContent =
                                 `(${action.goal_x.toFixed(1)}, ${action.goal_y.toFixed(1)}) - ${actionName}`;
 
-                            // 히스토리에 추가
                             llmCommandHistory.push({
                                 x: action.goal_x,
                                 y: action.goal_y,
                                 action: actionName,
                                 time: Date.now()
                             });
-
-                            // 최대 50개 유지
-                            if (llmCommandHistory.length > 50) {
-                                llmCommandHistory.shift();
-                            }
+                            if (llmCommandHistory.length > 50) llmCommandHistory.shift();
                         } else {
-                            // 목표점 없는 액션도 로그
                             document.getElementById('llm-goal').textContent = actionName;
                         }
 
-                        addLog(`LLM: ${actionName}` + (action.goal_x ? ` → (${action.goal_x.toFixed(1)}, ${action.goal_y.toFixed(1)})` : ''), 'llm');
+                        addLog(`LLM: ${actionName}` + (action.goal_x ? ` → (${action.goal_x.toFixed(1)}, ${action.goal_y.toFixed(1)})` : '') + (reason ? ` [${reason}]` : ''), 'llm');
                         drawMap();
                     } catch (e) {}
                 });
+        }
+
+        function updateLLMActionHistoryUI() {
+            const el = document.getElementById('llm-action-history');
+            if (!el) return;
+            if (llmActionHistory.length === 0) {
+                el.innerHTML = '<div style="color: var(--text-muted);">대기 중...</div>';
+                return;
+            }
+            el.innerHTML = llmActionHistory.map((h, i) => `
+                <div style="padding: 4px 0; border-bottom: 1px solid var(--border); ${i === 0 ? 'color: var(--accent-cyan);' : 'color: var(--text-secondary);'}">
+                    <span style="color: var(--text-muted); font-size: 9px;">${h.time}</span>
+                    <strong>${h.action}</strong>
+                    ${h.goal ? `<span style="color: var(--accent-green);">${h.goal}</span>` : ''}
+                    ${h.reason ? `<div style="font-size: 10px; color: var(--accent-yellow); margin-top: 2px;">${h.reason}</div>` : ''}
+                </div>
+            `).join('');
         }
 
         // 히스토리 초기화 버튼용
