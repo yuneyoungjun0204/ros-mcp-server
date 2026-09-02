@@ -55,15 +55,20 @@ prompts: |
   - 0° = 전방, 90° = 우측, 180° = 후방, 270° = 좌측
   - 스캔 인덱스 ≈ 각도 (360개 점)
 
+  ★ 부표 색상 규칙 ★
+  - 왼쪽 = 초록(green) 부표
+  - 오른쪽 = 빨간(red) 부표
+  - 초록과 빨간 부표 사이로 통과해야 함!
+
   ★ 부표 사이 통과 워크플로우 ★
-  1. find_obstacles_in_range(270, 360) → 왼쪽 장애물의 scan_idx 확인
-  2. find_obstacles_in_range(0, 90) → 오른쪽 장애물의 scan_idx 확인
+  1. find_obstacles_in_range(270, 360) → 왼쪽(초록) 장애물의 scan_idx 확인
+  2. find_obstacles_in_range(0, 90) → 오른쪽(빨간) 장애물의 scan_idx 확인
   3. navigate_between_points(left_scan_idx, right_scan_idx) 실행!
 
-  예시: 왼쪽 315°, 오른쪽 45°에 부표 감지
+  예시: 왼쪽 315°에 초록 부표, 오른쪽 45°에 빨간 부표 감지
   → navigate_between_points(315, 45)
 
-  ★★★ 부표 2개 보이면 무조건 navigate_between_points 사용! ★★★
+  ★★★ 초록(왼쪽)-빨간(오른쪽) 부표 2개 보이면 무조건 navigate_between_points 사용! ★★★
 
   === 판단 규칙 (우선순위 순서대로!) ===
   ★★★ 최우선: 양쪽에 장애물 보이면 → navigate_between_points ★★★
