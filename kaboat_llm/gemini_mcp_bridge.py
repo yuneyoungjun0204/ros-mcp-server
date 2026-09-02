@@ -23,9 +23,20 @@ import threading
 from typing import Optional, Dict, Callable
 from pathlib import Path
 
+import yaml
 import websocket
 import google.generativeai as genai
 from google.generativeai.types import FunctionDeclaration, Tool
+
+
+def load_kaboat_prompt() -> str:
+    """kaboat.yaml에서 시스템 프롬프트 로드 (Claude MCP와 동일한 소스 사용)"""
+    yaml_path = Path(__file__).parent.parent / 'robot_specifications' / 'kaboat.yaml'
+    if yaml_path.exists():
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            spec = yaml.safe_load(f)
+            return spec.get('prompts', '')
+    return ""
 
 
 # ============================================================
@@ -216,83 +227,21 @@ ROS_TOOLS = [
 class GeminiMCPBridge:
     """Gemini를 ros-mcp처럼 사용하는 브릿지"""
 
-    SYSTEM_PROMPT = """당신은 KABOAT 자율주행 보트의 AI 조종사입니다.
-매 턴마다 get_boat_status()로 상태를 확인하고, 즉시 액션을 실행하세요.
-
-=== 미션 웨이포인트 (로컬 좌표) ===
-1. start: (2.7, -6.8) - 시작점
-2. gate_start: (-1.6, 6.3) - 게이트 통과 시작
-3. gate_end: (-3.4, 87.8) - 게이트 통과 끝
-4. buoy_orbit: (-1.0, 116.0) - 부표선회
-5. hopping: (43.7, 105.6) - 호핑투어
-6. dock: (49.2, 16.3) - 도킹
-
-=== 풀 미션 순서 ===
-1. GATE: navigate_avoid로 gate_start(-1.6, 6.3) 이동 → 게이트 감지 시 gate_pass
-2. BUOY: navigate_avoid로 buoy_orbit(-1.0, 116.0) 이동 → 부표 감지 시 orbit
-3. HOPPING: navigate_avoid로 hopping(43.7, 105.6) 이동
-4. DOCK: navigate_avoid로 dock(49.2, 16.3) 이동 → 접근 후 stop
-
-=== 액션 명령어 ===
-- navigate_avoid: 장애물 회피 이동 (goal_x, goal_y)
-- navigate_direct: 직진 이동 (goal_x, goal_y)
-- orbit: 부표 선회 (lidar_idx, radius, direction, laps)
-- gate_pass: 게이트 통과 (left_idx, right_idx)
-- align: 헤딩 정렬 (heading) - 클러스터 방향으로 정렬
-- align_to_cluster: 클러스터 ID로 정렬 (cluster_id)
-- dorodori: 좌우 탐색 - 아무것도 안 보일 때만 사용
-- backward: 후진 (duration)
-- stop: 정지
-
-=== 2D LiDAR 스캔 기반 통과 (핵심 기능) ===
-navigate_between_points(left_idx, right_idx): 두 스캔 점 사이로 직선 통과
-find_obstacles_in_range(angle_min, angle_max): 각도 범위 내 장애물 찾기
-
-★ LiDAR 각도 규칙 ★
-- 0° = 전방, 90° = 우측, 180° = 후방, 270° = 좌측
-- 스캔 인덱스 ≈ 각도 (360개 점)
-
-★ 부표 사이 통과 워크플로우 ★
-1. find_obstacles_in_range(270, 360) → 왼쪽 장애물의 scan_idx 확인
-2. find_obstacles_in_range(0, 90) → 오른쪽 장애물의 scan_idx 확인
-3. navigate_between_points(left_scan_idx, right_scan_idx) 실행!
-
-예시: 왼쪽 315°, 오른쪽 45°에 부표 감지
-→ navigate_between_points(315, 45)
-
-★★★ 부표 2개 보이면 무조건 navigate_between_points 사용! ★★★
-
-=== 판단 규칙 (우선순위 순서대로!) ===
-★★★ 최우선: 양쪽에 장애물 보이면 → navigate_between_points ★★★
-
-1. get_boat_status() 호출하여 clusters 확인
-2. 양쪽(좌+우)에 장애물 있으면:
-   - find_obstacles_in_range(270, 360) → left_idx
-   - find_obstacles_in_range(0, 90) → right_idx
-   - navigate_between_points(left_idx, right_idx) 실행!
-3. 전방에만 장애물 → align 후 접근 또는 orbit
-4. 장애물 없음 → navigate_direct로 전진
-
-⚠️ dorodori 사용 금지:
-- 클러스터가 1개라도 보이면 dorodori 절대 사용 금지
-- 전방 50m 내에 아무것도 없을 때만 dorodori 허용
-
-⚠️ 핵심: 부표/게이트 보이면 그 사이로 직선 통과!
-- navigate_between_points = 직선 통과 (장애물 회피 없음)
-- 경로 이탈 금지!
-
-절대 멈추지 말고 계속 다음 액션을 실행하세요."""
-
     def __init__(self, api_key: Optional[str] = None):
         # API 키 로드
         if api_key is None:
             api_key = self._load_api_key()
 
+        # kaboat.yaml에서 프롬프트 로드 (Claude MCP와 동일한 소스)
+        system_prompt = load_kaboat_prompt()
+        if not system_prompt:
+            system_prompt = "당신은 KABOAT 자율주행 보트의 AI 조종사입니다."
+
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel(
             model_name="gemini-3.6-flash",
             tools=[Tool(function_declarations=ROS_TOOLS)],
-            system_instruction=self.SYSTEM_PROMPT
+            system_instruction=system_prompt
         )
         self.chat_session = None
         self.rosbridge = RosbridgeClient()
