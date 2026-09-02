@@ -180,6 +180,32 @@ ROS_TOOLS = [
             "required": ["action"]
         }
     ),
+    FunctionDeclaration(
+        name="navigate_between_points",
+        description="2D LiDAR 스캔의 두 점 사이 중점으로 직선 통과합니다. 부표/게이트 사이를 통과할 때 필수! get_boat_status()의 nearest_obstacles에서 왼쪽/오른쪽 물체의 scan_idx를 찾아 사용하세요.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "left_idx": {"type": "integer", "description": "왼쪽 물체의 LiDAR 스캔 인덱스 (270-360 범위, 예: 315)"},
+                "right_idx": {"type": "integer", "description": "오른쪽 물체의 LiDAR 스캔 인덱스 (0-90 범위, 예: 45)"},
+                "extend_dist": {"type": "number", "description": "통과 후 연장 거리(m). 기본값 10"}
+            },
+            "required": ["left_idx", "right_idx"]
+        }
+    ),
+    FunctionDeclaration(
+        name="find_obstacles_in_range",
+        description="특정 각도 범위 내에서 가장 가까운 LiDAR 점을 찾습니다. 이미지에서 '왼쪽에 부표'를 감지했다면 find_obstacles_in_range(270, 360)으로 해당 스캔 인덱스를 찾으세요.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "angle_min": {"type": "integer", "description": "시작 각도 (0-360, 0=전방)"},
+                "angle_max": {"type": "integer", "description": "끝 각도 (0-360)"},
+                "max_range": {"type": "number", "description": "최대 탐색 거리(m). 기본값 30"}
+            },
+            "required": ["angle_min", "angle_max"]
+        }
+    ),
 ]
 
 
@@ -218,12 +244,42 @@ class GeminiMCPBridge:
 - backward: 후진 (duration)
 - stop: 정지
 
-=== 판단 규칙 ===
-1. 매번 get_boat_status() 호출하여 obstacles 확인
-2. 클러스터가 보이면 → align으로 해당 방향 정렬 후 접근
-3. 2개 클러스터가 좌우에 있으면 → 게이트로 판단, gate_pass
-4. 1개 클러스터가 가까우면 → 부표로 판단, orbit
-5. 아무것도 없으면 → 전진(navigate_direct) 또는 dorodori
+=== 2D LiDAR 스캔 기반 통과 (핵심 기능) ===
+navigate_between_points(left_idx, right_idx): 두 스캔 점 사이로 직선 통과
+find_obstacles_in_range(angle_min, angle_max): 각도 범위 내 장애물 찾기
+
+★ LiDAR 각도 규칙 ★
+- 0° = 전방, 90° = 우측, 180° = 후방, 270° = 좌측
+- 스캔 인덱스 ≈ 각도 (360개 점)
+
+★ 부표 사이 통과 워크플로우 ★
+1. find_obstacles_in_range(270, 360) → 왼쪽 장애물의 scan_idx 확인
+2. find_obstacles_in_range(0, 90) → 오른쪽 장애물의 scan_idx 확인
+3. navigate_between_points(left_scan_idx, right_scan_idx) 실행!
+
+예시: 왼쪽 315°, 오른쪽 45°에 부표 감지
+→ navigate_between_points(315, 45)
+
+★★★ 부표 2개 보이면 무조건 navigate_between_points 사용! ★★★
+
+=== 판단 규칙 (우선순위 순서대로!) ===
+★★★ 최우선: 양쪽에 장애물 보이면 → navigate_between_points ★★★
+
+1. get_boat_status() 호출하여 clusters 확인
+2. 양쪽(좌+우)에 장애물 있으면:
+   - find_obstacles_in_range(270, 360) → left_idx
+   - find_obstacles_in_range(0, 90) → right_idx
+   - navigate_between_points(left_idx, right_idx) 실행!
+3. 전방에만 장애물 → align 후 접근 또는 orbit
+4. 장애물 없음 → navigate_direct로 전진
+
+⚠️ dorodori 사용 금지:
+- 클러스터가 1개라도 보이면 dorodori 절대 사용 금지
+- 전방 50m 내에 아무것도 없을 때만 dorodori 허용
+
+⚠️ 핵심: 부표/게이트 보이면 그 사이로 직선 통과!
+- navigate_between_points = 직선 통과 (장애물 회피 없음)
+- 경로 이탈 금지!
 
 절대 멈추지 말고 계속 다음 액션을 실행하세요."""
 
@@ -308,6 +364,18 @@ class GeminiMCPBridge:
                 return self._send_action_command(
                     args.get("action", ""),
                     args.get("params", {})
+                )
+            elif name == "navigate_between_points":
+                return self._navigate_between_points(
+                    args.get("left_idx", 315),
+                    args.get("right_idx", 45),
+                    args.get("extend_dist", 10.0)
+                )
+            elif name == "find_obstacles_in_range":
+                return self._find_obstacles_in_range(
+                    args.get("angle_min", 0),
+                    args.get("angle_max", 360),
+                    args.get("max_range", 30.0)
                 )
             else:
                 return {"error": f"Unknown function: {name}"}
@@ -411,6 +479,74 @@ class GeminiMCPBridge:
             "std_msgs/String",
             {"data": json.dumps(cmd)}
         )
+
+    def _navigate_between_points(self, left_idx: int, right_idx: int, extend_dist: float = 10.0) -> dict:
+        """2D LiDAR 스캔 두 점 사이로 직선 통과"""
+        cmd = {
+            "action": "pass_between_clusters",
+            "left_idx": left_idx,
+            "right_idx": right_idx,
+            "extend_dist": extend_dist
+        }
+        self._publish_to_topic(
+            "/llm_action",
+            "std_msgs/String",
+            {"data": json.dumps(cmd)}
+        )
+        return {
+            "status": "command_sent",
+            "action": "pass_between_points",
+            "left_idx": left_idx,
+            "right_idx": right_idx,
+            "extend_dist": extend_dist,
+            "description": f"LiDAR idx[{left_idx}] ↔ idx[{right_idx}] 사이 직선 통과 시작"
+        }
+
+    def _find_obstacles_in_range(self, angle_min: int, angle_max: int, max_range: float = 30.0) -> dict:
+        """특정 각도 범위에서 가장 가까운 LiDAR 점 찾기
+
+        LiDAR 각도 규칙:
+        - 0° = 전방, 90° = 우측, 180° = 후방, 270° = 좌측
+        - 스캔 인덱스 = 각도 (360개 점 기준)
+        """
+        status = self._get_boat_status()
+        if "error" in status:
+            return status
+
+        # clusters에서 해당 각도 범위의 물체 찾기
+        clusters = status.get("clusters", [])
+        found = []
+
+        for i, c in enumerate(clusters):
+            angle = c.get("center_angle", 0)
+            dist = c.get("center_dist", 999)
+
+            # 각도 범위 체크 (270-360 범위 처리)
+            in_range = False
+            if angle_min <= angle_max:
+                in_range = angle_min <= angle <= angle_max
+            else:  # 예: 270-45 (270~360, 0~45)
+                in_range = angle >= angle_min or angle <= angle_max
+
+            if in_range and dist <= max_range:
+                found.append({
+                    "cluster_id": i,
+                    "scan_idx": int(angle),  # 각도 ≈ 스캔 인덱스
+                    "angle": round(angle, 1),
+                    "distance": round(dist, 2)
+                })
+
+        # 거리순 정렬
+        found.sort(key=lambda x: x["distance"])
+
+        return {
+            "angle_range": f"{angle_min}°-{angle_max}°",
+            "max_range": max_range,
+            "found_count": len(found),
+            "obstacles": found,
+            "nearest": found[0] if found else None,
+            "hint": "navigate_between_points(left_idx, right_idx)에 scan_idx 사용"
+        }
 
     # ============================================================
     # Chat Interface

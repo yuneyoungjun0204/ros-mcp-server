@@ -817,6 +817,66 @@
                     </div>
                 </div>
             </div>
+
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <span class="icon">[SPD]</span>
+                    <h2>SPEED CONTROL</h2>
+                </div>
+                <div class="panel-body">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <span style="color: var(--text-muted); font-size: 0.8rem; min-width: 40px;">0.25x</span>
+                        <input type="range" id="speed-slider" min="0.25" max="5" step="0.25" value="1"
+                            style="flex: 1; accent-color: var(--cyan);" onchange="updateSpeed(this.value)">
+                        <span style="color: var(--text-muted); font-size: 0.8rem; min-width: 30px;">5x</span>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 1.5rem; font-weight: 700; color: var(--cyan);" id="speed-value">1.0x</span>
+                        <div style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px;">추력 배율</div>
+                    </div>
+                    <div class="btn-group" style="margin-top: 12px;">
+                        <button class="btn btn-secondary" onclick="setSpeedPreset(0.5)">0.5x</button>
+                        <button class="btn btn-primary" onclick="setSpeedPreset(1.0)">1x</button>
+                        <button class="btn btn-secondary" onclick="setSpeedPreset(2.0)">2x</button>
+                        <button class="btn btn-warning" onclick="setSpeedPreset(5.0)">MAX</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <span class="icon">[SET]</span>
+                    <h2>MISSION SETTINGS</h2>
+                </div>
+                <div class="panel-body">
+                    <!-- GOAL_RANGE 슬라이더 -->
+                    <div style="margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: var(--text-muted); font-size: 0.75rem;">도착 판정 거리</span>
+                            <span style="color: var(--cyan); font-weight: 700;" id="goal-range-value">5m</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="color: var(--text-muted); font-size: 0.7rem;">1m</span>
+                            <input type="range" id="goal-range-slider" min="1" max="25" step="1" value="5"
+                                style="flex: 1; accent-color: var(--green);" onchange="updateGoalRange(this.value)">
+                            <span style="color: var(--text-muted); font-size: 0.7rem;">25m</span>
+                        </div>
+                    </div>
+                    <!-- SPEED_MULTIPLIER 슬라이더 -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: var(--text-muted); font-size: 0.75rem;">이동 속도</span>
+                            <span style="color: var(--yellow); font-weight: 700;" id="move-speed-value">5</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="color: var(--text-muted); font-size: 0.7rem;">1</span>
+                            <input type="range" id="move-speed-slider" min="1" max="10" step="0.5" value="5"
+                                style="flex: 1; accent-color: var(--yellow);" onchange="updateMoveSpeed(this.value)">
+                            <span style="color: var(--text-muted); font-size: 0.7rem;">10</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </aside>
 
         <!-- Center - Main Display -->
@@ -851,6 +911,10 @@
                         <div class="status-card">
                             <div class="status-label">Decision</div>
                             <div class="status-value" id="decision-needed">--</div>
+                        </div>
+                        <div class="status-card highlight" style="grid-column: span 2;">
+                            <div class="status-label">미션 단계</div>
+                            <div class="status-value" id="mission-phase-info" style="font-size: 0.9rem;">0/0 (--) | --m</div>
                         </div>
                     </div>
 
@@ -1303,6 +1367,68 @@
             }
         }
 
+        async function updateSpeed(value) {
+            const multiplier = parseFloat(value);
+            document.getElementById('speed-value').textContent = multiplier.toFixed(2) + 'x';
+            try {
+                const res = await fetch(`${API_BASE}/speed`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ multiplier })
+                });
+                if (res.ok) {
+                    addLog(`속도 배율 변경: ${multiplier}x`, 'action');
+                    showToast(`속도: ${multiplier}x`, 'success');
+                }
+            } catch (e) {
+                showToast('속도 변경 실패', 'error');
+            }
+        }
+
+        function setSpeedPreset(value) {
+            document.getElementById('speed-slider').value = value;
+            updateSpeed(value);
+        }
+
+        async function loadSpeed() {
+            try {
+                const res = await fetch(`${API_BASE}/speed`);
+                const data = await res.json();
+                document.getElementById('speed-slider').value = data.multiplier;
+                document.getElementById('speed-value').textContent = data.multiplier.toFixed(2) + 'x';
+            } catch (e) {}
+        }
+
+        // GOAL_RANGE 조절 (도착 판정 거리)
+        async function updateGoalRange(value) {
+            document.getElementById('goal-range-value').textContent = value + 'm';
+            try {
+                await fetch(`${API_BASE}/settings/goal_range`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({value: parseFloat(value)})
+                });
+                addLog(`도착 판정 거리: ${value}m`, 'status');
+            } catch (e) {
+                console.error('Failed to update goal range:', e);
+            }
+        }
+
+        // SPEED_MULTIPLIER 조절 (이동 속도)
+        async function updateMoveSpeed(value) {
+            document.getElementById('move-speed-value').textContent = value;
+            try {
+                await fetch(`${API_BASE}/settings/move_speed`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({value: parseFloat(value)})
+                });
+                addLog(`이동 속도: ${value}`, 'status');
+            } catch (e) {
+                console.error('Failed to update move speed:', e);
+            }
+        }
+
         async function startMission() {
             const missionType = document.getElementById('mission-select').value;
             addLog(`개별 미션 시작: ${missionType}`, 'llm');
@@ -1426,6 +1552,15 @@
                         const dnEl = document.getElementById('decision-needed');
                         dnEl.textContent = dn ? 'YES' : 'NO';
                         dnEl.className = 'status-value' + (dn ? ' warning' : '');
+
+                        // 미션 단계 정보 표시
+                        const mp = data.mission_phase;
+                        if (mp) {
+                            const wpDist = data.waypoint_distance?.toFixed(1) || '--';
+                            const phaseEl = document.getElementById('mission-phase-info');
+                            phaseEl.textContent = `${mp.index}/${mp.total} (${mp.name || '--'}) | ${wpDist}m`;
+                            phaseEl.style.color = mp.auto_enabled ? 'var(--accent-cyan)' : 'var(--accent-yellow)';
+                        }
                     } catch (e) {}
                 });
 
@@ -2497,8 +2632,25 @@
         initLaunchers();
         connectROS();
         checkBackendStatus();
+        loadSpeed();
         setInterval(checkBackendStatus, 5000);
         addLog('KABOAT Control Center 시작', 'info');
+
+        // 자동 분석 시작 (카메라 이미지 수신 대기)
+        function startAutoAnalyzeWhenReady() {
+            if (currentImageData) {
+                const toggle = document.getElementById('auto-analyze-toggle');
+                if (toggle && !toggle.checked) {
+                    toggle.checked = true;
+                    toggleAutoAnalyze();
+                    addLog('자동 이미지 분석 활성화됨', 'info');
+                }
+            } else {
+                // 이미지 없으면 2초 후 재시도
+                setTimeout(startAutoAnalyzeWhenReady, 2000);
+            }
+        }
+        setTimeout(startAutoAnalyzeWhenReady, 3000);
     </script>
 </body>
 </html>

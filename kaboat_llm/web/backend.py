@@ -157,9 +157,11 @@ class LaunchRequest(BaseModel):
     extra_args: Optional[str] = ""
 
 
+WEB_DIR = Path(__file__).parent
+
 @app.get("/")
 async def root():
-    return FileResponse("index.html")
+    return FileResponse(WEB_DIR / "index.html")
 
 
 class ImageAnalysisRequest(BaseModel):
@@ -413,6 +415,58 @@ async def get_status():
     return status
 
 
+# 속도 배율 설정
+speed_multiplier = 1.0
+
+class SpeedRequest(BaseModel):
+    multiplier: float
+
+@app.get("/api/speed")
+async def get_speed():
+    """현재 속도 배율 조회"""
+    return {"multiplier": speed_multiplier}
+
+@app.post("/api/speed")
+async def set_speed(request: SpeedRequest):
+    """속도 배율 설정 (0.25 ~ 5.0)"""
+    global speed_multiplier
+    if request.multiplier < 0.25 or request.multiplier > 5.0:
+        raise HTTPException(400, "Speed multiplier must be between 0.25 and 5.0")
+    speed_multiplier = request.multiplier
+
+    # settings.py 파일도 업데이트
+    settings_path = Path("/home/yune/vrx_ws/src/kaboat_autonomous/config/settings.py")
+    if settings_path.exists():
+        content = settings_path.read_text()
+        import re
+        content = re.sub(r'SPEED_MULTIPLIER = [\d.]+', f'SPEED_MULTIPLIER = {speed_multiplier}', content)
+        settings_path.write_text(content)
+
+    return {"status": "ok", "multiplier": speed_multiplier}
+
+
+# === Mission Settings API ===
+
+class SettingsRequest(BaseModel):
+    value: float
+
+@app.post("/api/settings/goal_range")
+async def set_goal_range(request: SettingsRequest):
+    """도착 판정 거리 설정 (1-25m) - action_dispatcher로 명령 전송"""
+    value = max(1.0, min(25.0, request.value))
+    cmd = json.dumps({"action": "set_goal_range", "value": value})
+    await publish_to_topic("/llm_action", "std_msgs/String", {"data": cmd})
+    return {"status": "ok", "goal_range": value}
+
+@app.post("/api/settings/move_speed")
+async def set_move_speed(request: SettingsRequest):
+    """이동 속도 설정 (1-10) - action_dispatcher로 명령 전송"""
+    value = max(1.0, min(10.0, request.value))
+    cmd = json.dumps({"action": "set_speed", "value": value})
+    await publish_to_topic("/llm_action", "std_msgs/String", {"data": cmd})
+    return {"status": "ok", "move_speed": value}
+
+
 @app.post("/api/launch/{name}")
 async def launch_process(name: str, request: LaunchRequest = None):
     """프로세스 실행"""
@@ -639,7 +693,7 @@ async def gemini_mcp_disconnect():
 
 
 # 정적 파일 서빙
-app.mount("/static", StaticFiles(directory="."), name="static")
+app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 
 
 if __name__ == "__main__":

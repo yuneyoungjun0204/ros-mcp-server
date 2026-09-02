@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
-KABOAT 풀 미션 실행기
-전체 미션을 순차적으로 실행: 게이트 → 부표 선회 → 호핑 투어 → 도킹
+KABOAT 풀 미션 실행기 (v2)
+- action_dispatcher의 mission_phase.index 모니터링으로 웨이포인트 전환 감지
+- Gemini MCP로 주기적 이미지 분석
+- 전체 미션 순차 실행: 게이트 → 부표 선회 → 호핑 투어 → 도킹
 """
 
 import os
 import sys
 import json
 import time
+import base64
 from datetime import datetime
-
-import google.generativeai as genai
+from typing import Optional
 
 try:
     import roslibpy
@@ -18,238 +20,226 @@ except ImportError:
     print("[ERROR] roslibpy 필요: pip install roslibpy")
     sys.exit(1)
 
-# KABOAT 미션 프롬프트
-sys.path.insert(0, '/home/yune/vrx_ws/src/kaboat_autonomous')
+# Gemini MCP Bridge 임포트
+sys.path.insert(0, '/home/yune/ros-mcp-server')
 try:
-    from kaboat_autonomous.mission_prompt import (
-        generate_full_prompt,
-        format_status_for_llm,
-    )
-    MISSION_PROMPT_AVAILABLE = True
+    from kaboat_llm.gemini_mcp_bridge import GeminiMCPBridge
+    GEMINI_MCP_AVAILABLE = True
 except ImportError:
-    MISSION_PROMPT_AVAILABLE = False
-    print("[WARN] mission_prompt.py 로드 실패, 기본 프롬프트 사용")
+    GEMINI_MCP_AVAILABLE = False
+    print("[WARN] GeminiMCPBridge 로드 실패, 기본 Gemini API 사용")
 
+import google.generativeai as genai
 
 # 설정
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
 ROSBRIDGE_HOST = os.environ.get("ROSBRIDGE_HOST", "localhost")
 ROSBRIDGE_PORT = int(os.environ.get("ROSBRIDGE_PORT", 9090))
 
-# 풀 미션 순서
-FULL_MISSION_SEQUENCE = [
-    {
-        "type": "gate_search",
-        "name": "1단계: 게이트 탐색/통과",
-        "params": {},
-    },
-    {
-        "type": "buoy_orbit",
-        "name": "2단계: 부표 선회",
-        "params": {"color": "red", "direction": "cw"},
-    },
-    {
-        "type": "hopping_tour",
-        "name": "3단계: 호핑 투어",
-        "params": {},
-    },
-    {
-        "type": "docking",
-        "name": "4단계: 도킹",
-        "params": {"color": "blue"},
-    },
+# 미션 단계 이름 매핑 (settings.py MISSION_SEQUENCE 기준)
+MISSION_PHASE_NAMES = [
+    'start',
+    'gate_start',
+    'gate_end',
+    'buoy_orbit',
+    'hopping',
+    'obstacle_end_dock_start',
 ]
+
+# 각 미션 단계별 설명
+MISSION_DESCRIPTIONS = {
+    'start': '시작점 출발',
+    'gate_start': '게이트 진입',
+    'gate_end': '게이트 통과 완료',
+    'buoy_orbit': '부표 선회',
+    'hopping': '호핑 투어',
+    'obstacle_end_dock_start': '도킹 시작',
+}
 
 
 class FullMissionRunner:
-    """풀 미션 순차 실행기"""
+    """풀 미션 실행기 (v2) - action_dispatcher 연동"""
 
-    def __init__(self, model_name: str = "gemini-flash-lite-latest"):
-        self.model_name = model_name
-        self.current_mission_idx = 0
-        self.current_mission = None
-        self.model = None
+    def __init__(self, use_gemini_mcp: bool = True, image_interval: float = 5.0):
+        self.use_gemini_mcp = use_gemini_mcp and GEMINI_MCP_AVAILABLE
+        self.image_interval = image_interval  # 이미지 분석 주기 (초)
 
+        # 상태
         self.boat_status = None
-        self.lidar_summary = {}
-        self.decision_needed = False
-        self.current_action = None
-        self.last_action_result = None
-        self.mission_phase_done = False
+        self.action_status = None
+        self.current_phase_idx = 0
+        self.last_phase_idx = -1
+        self.current_image = None
+        self.last_image_time = 0
 
         self.running = False
-        self.decision_interval = 2.0
-        self.last_decision_time = 0
-        self.action_history = []
+        self.gemini_bridge: Optional[GeminiMCPBridge] = None
 
-        # Gemini
+        # Gemini API 설정
         if not GOOGLE_API_KEY:
             raise ValueError("GOOGLE_API_KEY 환경변수 필요")
         genai.configure(api_key=GOOGLE_API_KEY)
+        self.vision_model = genai.GenerativeModel('gemini-3.6-flash')
 
-        # ROS
+        # ROS 연결
         self.ros = roslibpy.Ros(host=ROSBRIDGE_HOST, port=ROSBRIDGE_PORT)
-        self.status_sub = roslibpy.Topic(self.ros, '/boat_status', 'std_msgs/String')
-        self.sensor_sub = roslibpy.Topic(self.ros, '/sensor_fusion', 'std_msgs/String')
+
+        # 토픽 구독
+        self.boat_status_sub = roslibpy.Topic(self.ros, '/boat_status', 'std_msgs/String')
+        self.action_status_sub = roslibpy.Topic(self.ros, '/action_status', 'std_msgs/String')
+        self.image_sub = roslibpy.Topic(self.ros, '/wamv/sensors/camera/image_raw/compressed', 'sensor_msgs/CompressedImage')
+
+        # 액션 발행
         self.action_pub = roslibpy.Topic(self.ros, '/llm_action', 'std_msgs/String')
 
     def connect(self):
-        print(f"[INFO] rosbridge 연결 중... {ROSBRIDGE_HOST}:{ROSBRIDGE_PORT}")
+        """ROS 및 Gemini MCP 연결"""
+        print(f"[INFO] rosbridge 연결 중... {ROSBRIDGE_HOST}:{ROSBRIDGE_PORT}", flush=True)
         self.ros.run()
         if not self.ros.is_connected:
             raise ConnectionError("rosbridge 연결 실패")
         print("[OK] rosbridge 연결됨")
 
-        self.status_sub.subscribe(self._status_callback)
-        self.sensor_sub.subscribe(self._sensor_callback)
+        # 토픽 구독
+        self.boat_status_sub.subscribe(self._boat_status_callback)
+        self.action_status_sub.subscribe(self._action_status_callback)
+        self.image_sub.subscribe(self._image_callback)
 
-    def _status_callback(self, msg):
+        # Gemini MCP 연결 (선택)
+        if self.use_gemini_mcp:
+            try:
+                self.gemini_bridge = GeminiMCPBridge()
+                self.gemini_bridge.connect(ROSBRIDGE_HOST, ROSBRIDGE_PORT)
+                print("[OK] Gemini MCP Bridge 연결됨")
+            except Exception as e:
+                print(f"[WARN] Gemini MCP 연결 실패: {e}, 기본 Vision API 사용")
+                self.gemini_bridge = None
+
+    def _boat_status_callback(self, msg):
+        """보트 상태 콜백"""
         try:
             self.boat_status = json.loads(msg['data'])
-            obs = self.boat_status.get('obstacles', {})
-            self.lidar_summary = {
-                'front_clear': obs.get('front', 999) > 10,
-                'closest_obstacle': {'distance': obs.get('closest', 999), 'angle': 0},
-            }
         except:
             pass
 
-    def _sensor_callback(self, msg):
+    def _action_status_callback(self, msg):
+        """액션 상태 콜백 - 미션 단계 감지"""
         try:
-            data = json.loads(msg['data'])
-            self.decision_needed = data.get('decision_needed', False)
-            self.current_action = data.get('current_action')
-            self.last_action_result = data.get('last_action_result')
+            self.action_status = json.loads(msg['data'])
 
-            # mission_phase_done 감지
-            if self.last_action_result == 'mission_phase_done':
-                self.mission_phase_done = True
+            # mission_phase에서 현재 인덱스 추출
+            mission_phase = self.action_status.get('mission_phase', {})
+            self.current_phase_idx = mission_phase.get('index', 0)
+
         except:
             pass
 
-    def _setup_mission(self, mission_config: dict):
-        """새 미션 설정"""
-        mission_type = mission_config['type']
-        mission_params = mission_config.get('params', {})
+    def _image_callback(self, msg):
+        """이미지 콜백"""
+        try:
+            self.current_image = msg['data']  # base64 encoded
+        except:
+            pass
+
+    def _analyze_image(self, prompt: str = None) -> Optional[str]:
+        """현재 이미지를 Gemini로 분석"""
+        if not self.current_image:
+            return None
+
+        if prompt is None:
+            phase_name = MISSION_PHASE_NAMES[self.current_phase_idx] if self.current_phase_idx < len(MISSION_PHASE_NAMES) else 'unknown'
+            prompt = f"현재 미션: {MISSION_DESCRIPTIONS.get(phase_name, phase_name)}. 전방 카메라 이미지를 분석하고 주요 물체(부표, 게이트, 장애물, 도킹 스테이션)를 식별하세요."
+
+        try:
+            # base64 디코딩
+            image_data = base64.b64decode(self.current_image)
+
+            start = time.time()
+            response = self.vision_model.generate_content([
+                prompt,
+                {"mime_type": "image/jpeg", "data": image_data}
+            ])
+            latency = int((time.time() - start) * 1000)
+
+            result = response.text
+            print(f"  [Vision] {latency}ms: {result[:100]}...")
+            return result
+
+        except Exception as e:
+            print(f"  [Vision Error] {e}")
+            return None
+
+    def _on_phase_change(self, old_idx: int, new_idx: int):
+        """미션 단계 변경 시 호출"""
+        old_name = MISSION_PHASE_NAMES[old_idx] if old_idx < len(MISSION_PHASE_NAMES) else 'unknown'
+        new_name = MISSION_PHASE_NAMES[new_idx] if new_idx < len(MISSION_PHASE_NAMES) else 'unknown'
 
         print(f"\n{'='*60}")
-        print(f"  {mission_config['name']}")
-        print(f"  타입: {mission_type}, 파라미터: {mission_params}")
+        print(f"  ✅ 미션 단계 전환: {old_name} → {new_name}")
+        print(f"  {MISSION_DESCRIPTIONS.get(new_name, '')}")
         print(f"{'='*60}\n")
 
-        # 시스템 프롬프트 생성
-        if MISSION_PROMPT_AVAILABLE:
-            system_prompt = generate_full_prompt(mission_type, mission_params)
-        else:
-            system_prompt = f"당신은 KABOAT 자율주행 선박 AI입니다. 현재 미션: {mission_type}"
+        # 단계 변경 시 이미지 분석
+        if self.current_image:
+            self._analyze_image(f"새로운 미션 단계 '{new_name}'에 진입했습니다. 전방 상황을 분석하세요.")
 
-        self.model = genai.GenerativeModel(
-            model_name=self.model_name,
-            system_instruction=system_prompt,
-            generation_config={"temperature": 0.1, "max_output_tokens": 512},
-        )
-
-        self.current_mission = mission_config
-        self.mission_phase_done = False
-        self.action_history = []
-
-    def _format_status(self) -> str:
-        if not self.boat_status:
-            return "상태 정보 없음"
-
-        if MISSION_PROMPT_AVAILABLE and self.lidar_summary:
-            return format_status_for_llm(self.boat_status, self.lidar_summary)
-
-        pos = self.boat_status.get('position', {})
-        obs = self.boat_status.get('obstacles', {})
-        return f"위치: ({pos.get('x',0):.1f}, {pos.get('y',0):.1f}), 헤딩: {pos.get('heading_deg',0):.1f}°, 전방: {obs.get('front',999):.1f}m"
-
-    def _ask_llm(self) -> dict:
-        prompt = f"""현재 상태:
-{self._format_status()}
-
-최근 행동: {self.action_history[-3:] if self.action_history else "없음"}
-이전 결과: {self.last_action_result or "없음"}
-
-다음 행동을 JSON으로 출력하세요:"""
-
-        start = time.time()
-        response = self.model.generate_content(prompt)
-        latency = (time.time() - start) * 1000
-
-        text = response.text.strip()
-        try:
-            if "```" in text:
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-            result = json.loads(text.strip())
-        except:
-            result = {"action": "hold", "duration": 1}
-
-        print(f"  [LLM] {latency:.0f}ms → {result.get('action', result)}")
-        return result
-
-    def _execute_action(self, action: dict):
-        action_type = action.get("action", "")
-        self.action_history.append(action_type)
-
+    def _send_action(self, action: dict):
+        """액션 발행"""
         msg = {'data': json.dumps(action)}
         self.action_pub.publish(roslibpy.Message(msg))
-        print(f"  [ACTION] {action_type}")
-
-        # 미션 완료 신호 감지
-        if action_type in ("mission_phase_done", "mission_complete"):
-            self.mission_phase_done = True
+        print(f"  [ACTION] {action.get('action', action)}")
 
     def run(self):
         """풀 미션 실행"""
         print("\n" + "=" * 60)
-        print("   KABOAT 풀 미션 시작")
-        print("   미션 순서: 게이트 → 부표 → 호핑 → 도킹")
+        print("   KABOAT 풀 미션 실행기 v2")
+        print("   - action_dispatcher 미션 단계 모니터링")
+        print("   - Gemini 주기적 이미지 분석")
         print("=" * 60 + "\n")
 
         self.running = True
-        self.current_mission_idx = 0
+        loop_count = 0
 
         try:
-            while self.running and self.current_mission_idx < len(FULL_MISSION_SEQUENCE):
-                # 현재 미션 설정
-                mission = FULL_MISSION_SEQUENCE[self.current_mission_idx]
-                self._setup_mission(mission)
+            while self.running:
+                loop_count += 1
 
-                # 미션 루프
-                loop_count = 0
-                while self.running and not self.mission_phase_done:
-                    loop_count += 1
+                # 상태 대기
+                if not self.action_status:
+                    print("  [WAIT] action_status 수신 대기...")
+                    time.sleep(1)
+                    continue
 
-                    if not self.boat_status:
-                        print("  [WAIT] 상태 수신 대기...")
-                        time.sleep(1)
-                        continue
+                # 미션 단계 변경 감지
+                if self.current_phase_idx != self.last_phase_idx:
+                    if self.last_phase_idx >= 0:
+                        self._on_phase_change(self.last_phase_idx, self.current_phase_idx)
+                    self.last_phase_idx = self.current_phase_idx
 
-                    now = time.time()
-                    if now - self.last_decision_time >= self.decision_interval:
-                        self.last_decision_time = now
+                # 미션 완료 체크
+                mission_phase = self.action_status.get('mission_phase', {})
+                total_phases = mission_phase.get('total', 6)
+                if self.current_phase_idx >= total_phases:
+                    print("\n🎉 풀 미션 완료!")
+                    break
 
-                        if self.decision_needed:
-                            print(f"  [Loop {loop_count}] decision_needed=True")
-                            action = self._ask_llm()
-                            self._execute_action(action)
-                        else:
-                            if loop_count % 10 == 0:
-                                print(f"  [Loop {loop_count}] 대기 중... action={self.current_action}")
+                # 주기적 이미지 분석
+                now = time.time()
+                if now - self.last_image_time >= self.image_interval:
+                    self.last_image_time = now
+                    if self.current_image:
+                        self._analyze_image()
 
-                    time.sleep(0.5)
+                # 상태 출력 (10 루프마다)
+                if loop_count % 20 == 0:
+                    pos = self.boat_status.get('position', {}) if self.boat_status else {}
+                    phase_name = MISSION_PHASE_NAMES[self.current_phase_idx] if self.current_phase_idx < len(MISSION_PHASE_NAMES) else '?'
+                    current_action = self.action_status.get('current_action', 'none')
+                    print(f"  [Status] Phase {self.current_phase_idx}/{total_phases} ({phase_name}) | "
+                          f"Action: {current_action} | "
+                          f"Pos: ({pos.get('x', 0):.1f}, {pos.get('y', 0):.1f})")
 
-                # 미션 완료
-                print(f"\n✅ {mission['name']} 완료!")
-                self.current_mission_idx += 1
-                time.sleep(2)  # 다음 미션 전 잠시 대기
-
-            print("\n" + "=" * 60)
-            print("   🎉 풀 미션 완료!")
-            print("=" * 60)
+                time.sleep(0.5)
 
         except KeyboardInterrupt:
             print("\n[STOP] 사용자 중단")
@@ -257,21 +247,34 @@ class FullMissionRunner:
             self.running = False
 
     def disconnect(self):
-        self.status_sub.unsubscribe()
+        """연결 해제"""
+        try:
+            self.boat_status_sub.unsubscribe()
+            self.action_status_sub.unsubscribe()
+            self.image_sub.unsubscribe()
+        except:
+            pass
+
+        if self.gemini_bridge:
+            try:
+                self.gemini_bridge.disconnect()
+            except:
+                pass
+
         self.ros.terminate()
 
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="KABOAT 풀 미션")
-    parser.add_argument("--model", default="gemini-flash-lite-latest")
-    parser.add_argument("--interval", type=float, default=2.0)
-    parser.add_argument("--start-from", type=int, default=0, help="시작 미션 인덱스 (0=gate, 1=buoy, ...)")
+    parser = argparse.ArgumentParser(description="KABOAT 풀 미션 v2")
+    parser.add_argument("--no-mcp", action="store_true", help="Gemini MCP 사용 안 함")
+    parser.add_argument("--image-interval", type=float, default=5.0, help="이미지 분석 주기 (초)")
     args = parser.parse_args()
 
-    runner = FullMissionRunner(args.model)
-    runner.decision_interval = args.interval
-    runner.current_mission_idx = args.start_from
+    runner = FullMissionRunner(
+        use_gemini_mcp=not args.no_mcp,
+        image_interval=args.image_interval
+    )
 
     try:
         runner.connect()
