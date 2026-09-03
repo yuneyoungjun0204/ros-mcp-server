@@ -11,6 +11,58 @@ from ros_mcp.utils.rosapi_types import detect_rosapi_types
 from ros_mcp.utils.websocket import WebSocketManager
 
 
+def connect_to_robot_impl(
+    ws_manager: WebSocketManager,
+    ip: str,
+    port: Union[int, str],
+    ping_timeout: float = 2.0,
+    port_timeout: float = 2.0,
+) -> dict:
+    """
+    Connect to a robot by setting the IP and port for the WebSocket connection, then testing connectivity.
+
+    Shared by the `connect_to_robot` MCP tool and the server's automatic startup connection.
+
+    Args:
+        ws_manager (WebSocketManager): The WebSocket manager to configure.
+        ip (str): The IP address of the rosbridge server.
+        port (int): The port number of the rosbridge server.
+        ping_timeout (float): Timeout for ping in seconds. Default = 2.0.
+        port_timeout (float): Timeout for port check in seconds. Default = 2.0.
+
+    Returns:
+        dict: Connection status with ping and port check results.
+    """
+    actual_ip = str(ip).strip() if ip else ip
+    actual_port = int(port) if port else port
+
+    # Set the IP and port
+    ws_manager.set_ip(actual_ip, actual_port)
+
+    # Test connectivity
+    ping_result = ping_ip_and_port(actual_ip, actual_port, ping_timeout, port_timeout)
+
+    # Detect ROS version and cache rosapi type resolver
+    detection_warning = None
+    if ping_result.get("port_check", {}).get("open"):
+        try:
+            detect_rosapi_types(ws_manager)
+        except Exception as e:
+            detection_warning = (
+                f"ROS version detection failed: {e}. "
+                "Tools will assume ROS 2 type format (rosapi_msgs/srv/*)."
+            )
+
+    # Combine the results
+    result: dict[str, Any] = {
+        "message": f"WebSocket IP set to {actual_ip}:{actual_port}",
+        "connectivity_test": ping_result,
+    }
+    if detection_warning:
+        result["warning"] = detection_warning
+    return result
+
+
 def register_connection_tools(
     mcp: FastMCP,
     ws_manager: WebSocketManager,
@@ -46,35 +98,9 @@ def register_connection_tools(
         Returns:
             dict: Connection status with ping and port check results.
         """
-        # Set default values if None
-        actual_ip = str(ip).strip() if ip else default_ip
-        actual_port = int(port) if port else default_port
-
-        # Set the IP and port
-        ws_manager.set_ip(actual_ip, actual_port)
-
-        # Test connectivity
-        ping_result = ping_ip_and_port(actual_ip, actual_port, ping_timeout, port_timeout)
-
-        # Detect ROS version and cache rosapi type resolver
-        detection_warning = None
-        if ping_result.get("port_check", {}).get("open"):
-            try:
-                detect_rosapi_types(ws_manager)
-            except Exception as e:
-                detection_warning = (
-                    f"ROS version detection failed: {e}. "
-                    "Tools will assume ROS 2 type format (rosapi_msgs/srv/*)."
-                )
-
-        # Combine the results
-        result: dict[str, Any] = {
-            "message": f"WebSocket IP set to {actual_ip}:{actual_port}",
-            "connectivity_test": ping_result,
-        }
-        if detection_warning:
-            result["warning"] = detection_warning
-        return result
+        actual_ip = ip if ip else default_ip
+        actual_port = port if port else default_port
+        return connect_to_robot_impl(ws_manager, actual_ip, actual_port, ping_timeout, port_timeout)
 
     @mcp.tool(
         description=(

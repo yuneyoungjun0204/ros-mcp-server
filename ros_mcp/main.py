@@ -11,6 +11,7 @@ from fastmcp import FastMCP
 from ros_mcp.prompts import register_all_prompts
 from ros_mcp.resources import register_all_resources
 from ros_mcp.tools import register_all_tools
+from ros_mcp.tools.connection import connect_to_robot_impl
 from ros_mcp.utils.websocket import WebSocketManager
 
 # ROS bridge connection settings
@@ -33,6 +34,15 @@ register_all_resources(mcp, ws_manager)
 
 # Register all prompts
 register_all_prompts(mcp)
+
+# Auto-connect to the default rosbridge target on startup, mirroring what
+# connect_to_robot(ip=ROSBRIDGE_IP, port=ROSBRIDGE_PORT) would do. Never
+# fatal: rosbridge may not be up yet, and tools can still call
+# connect_to_robot manually later.
+try:
+    connect_to_robot_impl(ws_manager, ROSBRIDGE_IP, ROSBRIDGE_PORT)
+except Exception as e:
+    print(f"Startup auto-connect to {ROSBRIDGE_IP}:{ROSBRIDGE_PORT} failed: {e}", file=sys.stderr)
 
 
 def parse_arguments():
